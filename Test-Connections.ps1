@@ -7,10 +7,13 @@
     For each entry, the script attempts to establish a TCP connection to the specified host and port (defaulting to port 80 if not specified).
     The result ("Success" or "Failed") is recorded in a column named after the current computer. The script also resolves and records the IP address of each host.
     If the -All switch is specified, all entries are processed; otherwise, only entries without a "Success" status for this computer are processed.
-    The updated results are written back to the CSV file.
+    The updated results are written back to the CSV file unless -TestOnly is specified.
 
 .PARAMETER All
     If specified, tests all hosts regardless of previous results.
+
+.PARAMETER TestOnly
+    Performs the tests without writing any updates back to the CSV file.
 
 .NOTES
     - Requires the CSV file to have a 'Hostname' column.
@@ -27,7 +30,8 @@
 
 #>
 param(
-    [switch]$All
+    [switch]$All,
+    [switch]$TestOnly
 )
 
 # Prevent running in ConstrainedLanguage mode
@@ -49,6 +53,7 @@ if (-Not (Test-Path $csvFilePath)) {
 
 # Import hosts from CSV
 $hosts = Import-Csv -Path $csvFilePath -Delimiter ";"
+$changesMade = $false
 
 # Ensure CSV has a Hostname column
 if (-Not ($hosts | Get-Member -Name Hostname)) {
@@ -87,11 +92,17 @@ foreach ($entry in $hosts) {
             $ipAddress = ""
         }
 
-        # Add or update the IPAddress column
-        if ($entry.PSObject.Properties.Name -contains "IPAddress") {
-            $entry.IPAddress = $ipAddress
-        } else {
-            $entry | Add-Member -NotePropertyName "IPAddress" -NotePropertyValue $ipAddress
+        if (-not $TestOnly) {
+            # Add or update the IPAddress column
+            if ($entry.PSObject.Properties.Name -contains "IPAddress") {
+                if ($entry.IPAddress -ne $ipAddress) {
+                    $entry.IPAddress = $ipAddress
+                    $changesMade = $true
+                }
+            } else {
+                $entry | Add-Member -NotePropertyName "IPAddress" -NotePropertyValue $ipAddress
+                $changesMade = $true
+            }
         }
     }
     
@@ -112,13 +123,28 @@ foreach ($entry in $hosts) {
         $status = "Failed"
     }
 
-    # Add or update the status column for this machine
-    if ($entry.PSObject.Properties.Name -contains $computerName) {
-        $entry.$computerName = $status
-    } else {
-        $entry | Add-Member -NotePropertyName $computerName -NotePropertyValue $status
+    if (-not $TestOnly) {
+        # Add or update the status column for this machine
+        if ($entry.PSObject.Properties.Name -contains $computerName) {
+            if ($entry.$computerName -ne $status) {
+                $entry.$computerName = $status
+                $changesMade = $true
+            }
+        } else {
+            $entry | Add-Member -NotePropertyName $computerName -NotePropertyValue $status
+            $changesMade = $true
+        }
     }
 }
 
-# Export the updated CSV (overwrite original)
-$hosts | Export-Csv -Path $csvFilePath -NoTypeInformation -Delimiter ";"
+# Export or report based on mode
+if (-not $TestOnly) {
+    if ($changesMade) {
+        $hosts | Export-Csv -Path $csvFilePath -NoTypeInformation -Delimiter ";"
+        Write-Host "CSV file updated." -ForegroundColor Green
+    } else {
+        Write-Host "No changes were made to the CSV file." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Test completed. CSV file was not updated (-TestOnly)." -ForegroundColor Yellow
+}
