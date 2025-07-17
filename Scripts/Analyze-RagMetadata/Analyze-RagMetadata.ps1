@@ -18,7 +18,7 @@
     Minimum frequency threshold for values to appear in output (default is 1).
 
 .EXAMPLE
-    .\Analyze-RAG-Metadata.ps1 -InputFile ".\rag_data.json" -OutputFile ".\analysis.json" -Limit 2
+    .\Analyze-RagMetadata.ps1 -InputFile ".\rag_data.json" -OutputFile ".\analysis.json" -Limit 2
 #>
 
 param (
