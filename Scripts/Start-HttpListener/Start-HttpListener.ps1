@@ -21,7 +21,7 @@
         Port for HTTPS prefix (none by default). Ignored if -Prefixes supplied.
 
     .PARAMETER LogRoot
-        Directory where per-request log files will be written. Default: <script folder>\Host-HttpListenerLogs.
+        Directory where per-request log files will be written. Default: <script folder>\Start-HttpListenerLogs.
 
     .PARAMETER AllowAllMethods
         By default only POST and PUT requests are logged; others get 405. Use -AllowAllMethods to log all.
@@ -34,15 +34,15 @@
 
     .EXAMPLE
         # Listen HTTP 8080 only
-        pwsh ./Host-HttpListener.ps1 -HttpPort 8080
+        pwsh ./Start-HttpListener.ps1 -HttpPort 8080
 
     .EXAMPLE
         # Listen HTTP + HTTPS; custom log root
-        pwsh ./Host-HttpListener.ps1 -HttpPort 8080 -HttpsPort 8443 -LogRoot C:\Temp\HookLogs
+        pwsh ./Start-HttpListener.ps1 -HttpPort 8080 -HttpsPort 8443 -LogRoot C:\Temp\HookLogs
 
     .EXAMPLE
         # Provide explicit prefixes (Linux-friendly *)
-        pwsh ./Host-HttpListener.ps1 -Prefixes 'http://*:5000/'
+        pwsh ./Start-HttpListener.ps1 -Prefixes 'http://*:5000/'
 
     .NOTES
         Stop with Ctrl+C.
@@ -58,7 +58,7 @@ param(
     [string[]]$Prefixes,
     [int]$HttpPort = 8080,
     [int]$HttpsPort,
-    [string]$LogRoot = (Join-Path $PSScriptRoot 'Host-HttpListenerLogs'),
+    [string]$LogRoot = (Join-Path $PSScriptRoot 'Start-HttpListenerLogs'),
     [switch]$AllowAllMethods,
     [int]$MaxBodyBytes = 104857600,
     [switch]$Once
@@ -296,12 +296,12 @@ Write-Host 'Listener stopped.' -ForegroundColor Yellow
 =======================
 QUICK START (minimal)
 =======================
-1. Save this file as Host-HttpListener.ps1.
+1. Save this file as Start-HttpListener.ps1.
 2. Run (HTTP only):
-       pwsh ./Host-HttpListener.ps1 -HttpPort 8080
+       pwsh ./Start-HttpListener.ps1 -HttpPort 8080
    Send a test:
        curl -X POST http://localhost:8080/test -H 'X-Example: 123' -d 'hello world'
-3. View logs under ./Host-HttpListenerLogs/<date>/...
+3. View logs under ./Start-HttpListenerLogs/<date>/...
 
 =======================
 HTTPS (Windows) QUICK STEPS
@@ -316,7 +316,7 @@ netsh http add sslcert ipport=0.0.0.0:8443 certhash=$($cert.Thumbprint) appid='{
 netsh http add urlacl url=https://+:8443/ user=USER
 
 # Run listener:
-pwsh ./Host-HttpListener.ps1 -HttpsPort 8443
+pwsh ./Start-HttpListener.ps1 -HttpsPort 8443
 
 # Test:
 curl -k -X POST https://localhost:8443/test -d '{"ping":1}' -H 'Content-Type: application/json'
