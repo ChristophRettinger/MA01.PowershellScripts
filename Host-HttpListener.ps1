@@ -249,7 +249,7 @@ if (-not $AllowAllMethods) { Write-Host "Allowed methods: POST, PUT" -Foreground
 $stopRequested = $false
 
 # handle Ctrl+C gracefully
-$null = Register-ObjectEvent -SourceIdentifier ConsoleBreak -InputObject ([Console]::CancelKeyPress) -EventName CancelKeyPress -Action {
+$null = Register-ObjectEvent -SourceIdentifier ConsoleBreak -InputObject ([Console]) -EventName CancelKeyPress -Action {
     Write-Host "Ctrl+C detected - stopping listener..." -ForegroundColor Yellow
     $script:stopRequested = $true
     $event.Sender.Cancel = $true  # prevent abrupt kill; we'll exit loop
