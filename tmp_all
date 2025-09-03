@@ -151,28 +151,16 @@ if ($IncludeElastic) {
 # Collect results for all Anstalten
 $results = @()
 
-# Initialize progress tracking for overall run
-$overallActivity = 'Processing Anstalten'
-$idx = 0
-$total = ($targetMappings | Measure-Object).Count
-Write-Progress -Id 1 -Activity $overallActivity -Status 'Starting…' -PercentComplete 0
-
 foreach ($map in $targetMappings) {
-    $idx++
     $anst = $map.Anstalt
     $dbName = $map.DatabaseName
     $elasticName = $map.ElasticName
-
-    # Update overall progress for current item
-    $overallPct = if ($total -gt 0) { [int]((($idx - 1) * 100) / $total) } else { 0 }
-    Write-Progress -Id 1 -Activity $overallActivity -Status "Anstalt $anst ($idx/$total)" -PercentComplete $overallPct
 
     # Prepare connection string using integrated security per database
     $connectionString = "Server=$DatabaseServerConnection;Database=$dbName;Integrated Security=True;TrustServerCertificate=True;"
 
     $dbMin = $null; $dbMax = $null; $dbCount = $null
     try {
-        Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'DB query' -PercentComplete 10
         $connection = New-Object System.Data.SqlClient.SqlConnection $connectionString
         $command = $connection.CreateCommand()
         $command.CommandText = $query
@@ -192,22 +180,18 @@ foreach ($map in $targetMappings) {
         }
         $reader.Close()
         $connection.Close()
-        Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'DB query done' -PercentComplete 40
     }
     catch {
         Write-Warning "[$anst/$dbName] Failed to query database: $_"
-        Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'DB query failed' -PercentComplete 40
     }
 
     $esMin = $null; $esMax = $null; $esCount = $null
     if ($IncludeElastic -and $apiKey) {
         try {
-            Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'ES initial search' -PercentComplete 50
             # Build Elasticsearch query body per anstalt/database - fetch documents (no aggs)
             $filters = @()
             $filters += @{ term = @{ 'BK.SUBFL_sourcedb' = $elasticName } }
             $filters += @{ term = @{ 'ScenarioName' = 'ITI_SUBFL_MedArchiv_auslesen_4086' } }
-            $filters += @{ range = @{ 'BK.SUBFL_sourceid' = @{ gte = $dbMin; lte = $dbMax } } }
 
             $range = @{ gte = $StartDate.ToString('o') }
             if ($includeEndDate) { $range.lte = $EndDate.ToString('o') }
@@ -218,7 +202,7 @@ foreach ($map in $targetMappings) {
                 query = @{ bool = @{ filter = $filters } }
                 _source = @('BK.SUBFL_sourceid')
             } | ConvertTo-Json -Depth 6
-            
+            $esBody
             # Ensure scroll param on the search URL
             $searchUri = if ($ElasticUrl -match '\?') { "$ElasticUrl&scroll=1m" } else { "$ElasticUrl?scroll=1m" }
 
@@ -232,14 +216,10 @@ foreach ($map in $targetMappings) {
             } else {
                 $scrollId = $esResponse._scroll_id
                 $hits = @($esResponse.hits.hits)
-                $page = 0
                 foreach ($h in $hits) {
                     $val = $h._source.BK.SUBFL_sourceid
                     if ($null -ne $val -and "$val" -ne '') { [void]$ids.Add([string]$val) }
                 }
-                $page++
-                $pc = 60 + [int]([Math]::Min(35, $page*5))
-                Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status "ES scrolling (page $page) collected $($ids.Count)" -PercentComplete $pc
 
                 if ($scrollId) {
                     # Derive scroll endpoint
@@ -259,9 +239,6 @@ foreach ($map in $targetMappings) {
                             $val = $h._source.BK.SUBFL_sourceid
                             if ($null -ne $val -and "$val" -ne '') { [void]$ids.Add([string]$val) }
                         }
-                        $page++
-                        $pc = 60 + [int]([Math]::Min(35, $page*5))
-                        Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status "ES scrolling (page $page) collected $($ids.Count)" -PercentComplete $pc
                     }
                 }
 
@@ -280,7 +257,6 @@ foreach ($map in $targetMappings) {
                     $esMin = $sorted[0]
                     $esMax = $sorted[-1]
                 }
-                Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'ES aggregation done' -PercentComplete 95
             }
         }
         catch {
@@ -307,9 +283,6 @@ foreach ($map in $targetMappings) {
         EsMax        = $esMax
         EsCount      = $esCount
     }
-
-    # Complete per-anstalt progress
-    Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'Done' -PercentComplete 100 -Completed
 }
 
 if ($results.Count -gt 0) {
@@ -318,5 +291,3 @@ if ($results.Count -gt 0) {
     Write-Warning 'No results to display.'
 }
 
-# Complete overall progress
-Write-Progress -Id 1 -Activity $overallActivity -Status 'Completed' -PercentComplete 100 -Completed
