@@ -188,36 +188,87 @@ foreach ($map in $targetMappings) {
     $esMin = $null; $esMax = $null; $esCount = $null
     if ($IncludeElastic -and $apiKey) {
         try {
-            # Build Elasticsearch query body per anstalt/database
+            # Build Elasticsearch query body per anstalt/database - fetch documents (no aggs)
             $filters = @()
-            $filters += @{ term = @{ 'BK.SUBFL_sourcedb.keyword' = $elasticName } }
+            $filters += @{ term = @{ 'BK.SUBFL_sourcedb' = $elasticName } }
+            $filters += @{ term = @{ 'ScenarioName' = 'ITI_SUBFL_MedArchiv_auslesen_4086' } }
 
             $range = @{ gte = $StartDate.ToString('o') }
             if ($includeEndDate) { $range.lte = $EndDate.ToString('o') }
             $filters += @{ range = @{ $ElasticTimeField = $range } }
 
             $esBody = @{ 
-                size = 0
+                size = 1000
                 query = @{ bool = @{ filter = $filters } }
-                aggs = @{ 
-                    min_id = @{ min = @{ field = 'BK.SUBFL_sourceid' } }
-                    max_id = @{ max = @{ field = 'BK.SUBFL_sourceid' } }
-                    count_id = @{ value_count = @{ field = 'BK.SUBFL_sourceid' } }
+                _source = @('BK.SUBFL_sourceid')
+            } | ConvertTo-Json -Depth 6
+            $esBody
+            # Ensure scroll param on the search URL
+            $searchUri = if ($ElasticUrl -match '\?') { "$ElasticUrl&scroll=1m" } else { "$ElasticUrl?scroll=1m" }
+
+            $ids = New-Object System.Collections.Generic.List[string]
+
+            $esResponse = Invoke-RestMethod -Method Post -Uri $searchUri -Headers $headers -Body $esBody -TimeoutSec 120
+            if ($esResponse.error) {
+                $etype = $esResponse.error.type
+                $ereason = $esResponse.error.reason
+                Write-Error "[$anst/$elasticName] Elasticsearch error: $etype - $ereason"
+            } else {
+                $scrollId = $esResponse._scroll_id
+                $hits = @($esResponse.hits.hits)
+                foreach ($h in $hits) {
+                    $val = $h._source.BK.SUBFL_sourceid
+                    if ($null -ne $val -and "$val" -ne '') { [void]$ids.Add([string]$val) }
                 }
-            } | ConvertTo-Json -Depth 8
 
-            $esResponse = Invoke-RestMethod -Method Post -Uri $ElasticUrl -Headers $headers -Body $esBody -TimeoutSec 120
+                if ($scrollId) {
+                    # Derive scroll endpoint
+                    $u = [System.Uri]$ElasticUrl
+                    $scrollUri = "$($u.Scheme)://$($u.Authority)/_search/scroll"
+                    while ($hits.Count -gt 0) {
+                        $scrollBody = @{ scroll = '1m'; scroll_id = $scrollId } | ConvertTo-Json -Depth 3
+                        $scrollResp = Invoke-RestMethod -Method Post -Uri $scrollUri -Headers $headers -Body $scrollBody -TimeoutSec 120
+                        if ($scrollResp.error) {
+                            Write-Error "[$anst/$elasticName] Elasticsearch scroll error: $($scrollResp.error.type) - $($scrollResp.error.reason)"
+                            break
+                        }
+                        $scrollId = $scrollResp._scroll_id
+                        $hits = @($scrollResp.hits.hits)
+                        if (-not $hits -or $hits.Count -eq 0) { break }
+                        foreach ($h in $hits) {
+                            $val = $h._source.BK.SUBFL_sourceid
+                            if ($null -ne $val -and "$val" -ne '') { [void]$ids.Add([string]$val) }
+                        }
+                    }
+                }
 
-            if ($esResponse.aggregations) {
-                $esMin = $esResponse.aggregations.min_id.value
-                $esMax = $esResponse.aggregations.max_id.value
-                $esCount = $esResponse.aggregations.count_id.value
-            } elseif ($esResponse.hits) {
-                $esCount = $esResponse.hits.total.value
+                # Distinct IDs and compute min/max/count
+                $distinct = $ids | Where-Object { $_ } | Select-Object -Unique
+                $esCount = ($distinct | Measure-Object).Count
+
+                # Try numeric min/max, fallback to string ordering
+                $nums = @()
+                foreach ($s in $distinct) { $n = 0L; if ([long]::TryParse($s, [ref]$n)) { $nums += $n } }
+                if ($nums.Count -gt 0) {
+                    $esMin = ($nums | Measure-Object -Minimum).Minimum
+                    $esMax = ($nums | Measure-Object -Maximum).Maximum
+                } elseif ($distinct.Count -gt 0) {
+                    $sorted = $distinct | Sort-Object
+                    $esMin = $sorted[0]
+                    $esMax = $sorted[-1]
+                }
             }
         }
         catch {
-            Write-Warning "[$anst/$elasticName] Elasticsearch query failed: $_"
+            # Emit error with response body if available
+            $msg = $_.Exception.Message
+            try {
+                $resp = $_.Exception.Response
+                if ($resp) {
+                    $rs = $resp.GetResponseStream(); if ($rs) { $sr = New-Object System.IO.StreamReader($rs); $body = $sr.ReadToEnd(); $sr.Dispose(); if ($body) { $msg = "$msg Response: $body" } }
+                }
+            } catch {}
+            Write-Error "[$anst/$elasticName] Elasticsearch query failed: $msg"
         }
     }
 
