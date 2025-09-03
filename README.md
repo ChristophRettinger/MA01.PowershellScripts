@@ -11,3 +11,4 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 - **Extract-ChatProperties.ps1** - Extracts selected properties from chat metadata JSON and outputs a simplified JSON file containing only those fields.
 - **Start-HttpListener.ps1** - Hosts a lightweight HTTP/HTTPS listener that logs inbound requests to files.
 - **Test-Connections.ps1** - Tests TCP connectivity to hosts specified in a CSV file, records the result for each host, and updates the file with resolved IP addresses.
+- **Process-MissingMedarchiv.ps1** - Queries changelog data for a date range and prepares comparison with Elasticsearch to find missing records.
