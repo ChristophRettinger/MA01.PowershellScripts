@@ -58,7 +58,7 @@
 
 .PARAMETER OutputDirectory
     Directory where missing-ID files are written when DB and ES counts differ.
-    Defaults to '<script folder>/MissingMedarchivOutput'. One file per Anstalt.
+    Defaults to '<script folder>/Output'. One file per Anstalt.
 
 .EXAMPLE
     ./Process-MissingMedarchiv.ps1 -StartDate '2025-09-03'
@@ -103,7 +103,7 @@ param(
     [switch]$IncludeElastic,
 
     [Parameter(Mandatory=$false)]
-    [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'MissingMedarchivOutput')
+    [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output')
 )
 
 # Determine effective StartDate/EndDate defaults for whole current day if omitted

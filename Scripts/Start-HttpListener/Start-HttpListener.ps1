@@ -58,7 +58,7 @@ param(
     [string[]]$Prefixes,
     [int]$HttpPort = 8080,
     [int]$HttpsPort,
-    [string]$LogRoot = (Join-Path $PSScriptRoot 'Start-HttpListenerLogs'),
+    [string]$LogRoot = (Join-Path $PSScriptRoot 'Output'),
     [switch]$AllowAllMethods,
     [int]$MaxBodyBytes = 104857600,
     [switch]$Once

@@ -1,2 +1,2 @@
 ﻿*.key
-Scripts/Process-MissingMedarchiv/MissingMedarchivOutput
+**/Output
