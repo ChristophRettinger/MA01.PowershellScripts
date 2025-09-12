@@ -52,6 +52,14 @@
     When specified, also performs the Elasticsearch query and includes its
     min/max/count in the result table. Otherwise only DB results are shown.
 
+.PARAMETER IncreaseElasticDateRange
+    Number of hours to extend the Elasticsearch time range beyond the DB range.
+    Subtracts this from StartDate and adds to EndDate for Elasticsearch only. Defaults to 4.
+
+.PARAMETER OutputDirectory
+    Directory where missing-ID files are written when DB and ES counts differ.
+    Defaults to '<script folder>/MissingMedarchivOutput'. One file per Anstalt.
+
 .EXAMPLE
     ./Process-MissingMedarchiv.ps1 -StartDate '2025-09-03'
 
@@ -80,18 +88,22 @@ param(
     [string]$MappingCsvPath = (Join-Path -Path $PSScriptRoot -ChildPath 'DatabaseMappings.csv'),
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticTimeField = '@timestamp'
-,
+    [string]$ElasticTimeField = '@timestamp',
 
     [Parameter(Mandatory=$false)]
     [string]$ElasticApiKey,
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath
-,
+    [string]$ElasticApiKeyPath,
 
     [Parameter(Mandatory=$false)]
-    [switch]$IncludeElastic
+    [int]$IncreaseElasticDateRange = 4,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$IncludeElastic,
+
+    [Parameter(Mandatory=$false)]
+    [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'MissingMedarchivOutput')
 )
 
 # Determine effective StartDate/EndDate defaults for whole current day if omitted
@@ -157,6 +169,9 @@ $idx = 0
 $total = ($targetMappings | Measure-Object).Count
 Write-Progress -Id 1 -Activity $overallActivity -Status 'Starting…' -PercentComplete 0
 
+# Ensure output directory exists (for potential missing-IDs files)
+try { if (-not (Test-Path -Path $OutputDirectory)) { $null = New-Item -ItemType Directory -Path $OutputDirectory -Force } } catch { Write-Warning "Failed to ensure output directory '$OutputDirectory': $_" }
+
 foreach ($map in $targetMappings) {
     $idx++
     $anst = $map.Anstalt
@@ -200,7 +215,8 @@ foreach ($map in $targetMappings) {
     }
 
     $esMin = $null; $esMax = $null; $esCount = $null
-    if ($IncludeElastic -and $apiKey) {
+    $esDistinct = $null
+    if ($IncludeElastic -and $apiKey -and $dbCount -and $dbCount -gt 0) {
         try {
             Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'ES initial search' -PercentComplete 50
             # Build Elasticsearch query body per anstalt/database - fetch documents (no aggs)
@@ -209,8 +225,13 @@ foreach ($map in $targetMappings) {
             $filters += @{ term = @{ 'ScenarioName' = 'ITI_SUBFL_MedArchiv_auslesen_4086' } }
             $filters += @{ range = @{ 'BK.SUBFL_sourceid' = @{ gte = $dbMin; lte = $dbMax } } }
 
-            $range = @{ gte = $StartDate.ToString('o') }
-            if ($includeEndDate) { $range.lte = $EndDate.ToString('o') }
+            # Expand ES time range by IncreaseElasticDateRange hours on both sides
+            $esStart = $StartDate.AddHours(-1 * [double]$IncreaseElasticDateRange)
+            $range = @{ gte = $esStart.ToString('o') }
+            if ($includeEndDate) {
+                $esEnd = $EndDate.AddHours([double]$IncreaseElasticDateRange)
+                $range.lte = $esEnd.ToString('o')
+            }
             $filters += @{ range = @{ $ElasticTimeField = $range } }
 
             $esBody = @{ 
@@ -267,6 +288,7 @@ foreach ($map in $targetMappings) {
 
                 # Distinct IDs and compute min/max/count
                 $distinct = $ids | Where-Object { $_ } | Select-Object -Unique
+                $esDistinct = $distinct
                 $esCount = ($distinct | Measure-Object).Count
 
                 # Try numeric min/max, fallback to string ordering
@@ -293,6 +315,60 @@ foreach ($map in $targetMappings) {
                 }
             } catch {}
             Write-Error "[$anst/$elasticName] Elasticsearch query failed: $msg"
+        }
+    }
+
+    # If counts differ, compute and write missing IDs present in DB but not in ES
+    if ($IncludeElastic -and $apiKey -and $dbCount -ne $esCount) {
+        try {
+            Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'Computing missing IDs' -PercentComplete 96
+
+            # Fetch distinct IDs from DB for the same time range
+            $idsQuery = "SELECT DISTINCT CL_ID_BIG FROM CHANGELOG_HISTORY WHERE PROCESSINGTIME >= @StartDate"
+            if ($includeEndDate) { $idsQuery += " AND PROCESSINGTIME <= @EndDate" }
+
+            $dbIds = New-Object System.Collections.Generic.List[string]
+            $connection2 = New-Object System.Data.SqlClient.SqlConnection $connectionString
+            $command2 = $connection2.CreateCommand()
+            $command2.CommandText = $idsQuery
+            $null = $command2.Parameters.Add('@StartDate', [System.Data.SqlDbType]::DateTime)
+            $command2.Parameters['@StartDate'].Value = $StartDate
+            if ($includeEndDate) {
+                $null = $command2.Parameters.Add('@EndDate', [System.Data.SqlDbType]::DateTime)
+                $command2.Parameters['@EndDate'].Value = $EndDate
+            }
+            $connection2.Open()
+            $reader2 = $command2.ExecuteReader()
+            while ($reader2.Read()) {
+                $v = $reader2[0]
+                if ($null -ne $v) { [void]$dbIds.Add([string]$v) }
+            }
+            $reader2.Close(); $connection2.Close()
+
+            # Build ES set
+            $esSet = New-Object System.Collections.Generic.HashSet[string]
+            if ($esDistinct) { foreach($e in $esDistinct){ [void]$esSet.Add([string]$e) } }
+
+            # Compute missing present in DB but not ES
+            $missing = New-Object System.Collections.Generic.List[string]
+            foreach ($d in $dbIds) { if (-not $esSet.Contains([string]$d)) { [void]$missing.Add([string]$d) } }
+
+            # Write file if any missing
+            if ($missing.Count -gt 0) {
+                $datePartStart = $StartDate.ToString('yyyyMMddTHHmmss')
+                $datePartEnd = if ($includeEndDate) { $EndDate.ToString('yyyyMMddTHHmmss') } else { 'open' }
+                $fileName = "MissingIds_${anst}_${dbName}_${datePartStart}_${datePartEnd}.txt"
+                $filePath = Join-Path -Path $OutputDirectory -ChildPath $fileName
+                $missing | Sort-Object {[long]$_} -ErrorAction SilentlyContinue | Set-Content -Path $filePath -Encoding UTF8
+                Write-Host "[$anst/$dbName] Wrote missing IDs to: $filePath"
+            } else {
+                Write-Host "[$anst/$dbName] No missing IDs to write."
+            }
+
+            Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'Missing IDs written' -PercentComplete 98
+        }
+        catch {
+            Write-Warning "[$anst/$dbName] Failed computing/writing missing IDs: $_"
         }
     }
 
