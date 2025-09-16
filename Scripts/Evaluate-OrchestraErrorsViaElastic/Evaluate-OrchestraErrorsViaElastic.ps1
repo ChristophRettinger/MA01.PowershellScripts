@@ -168,50 +168,6 @@ if ($BusinessKeys) {
     }
 }
 
-function Get-ElasticSourceValue {
-    param(
-        [object]$Source,
-        [string]$FieldPath
-    )
-
-    if (-not $Source -or [string]::IsNullOrWhiteSpace($FieldPath)) {
-        return $null
-    }
-
-    $current = $Source
-    foreach ($segment in $FieldPath -split '\.') {
-        if ($null -eq $current) { return $null }
-
-        $prop = $current.PSObject.Properties[$segment]
-        if ($prop) {
-            $current = $prop.Value
-            continue
-        }
-
-        if ($current -is [System.Collections.IDictionary]) {
-            if ($current.Contains($segment)) {
-                $current = $current[$segment]
-                continue
-            }
-
-            $foundKey = $false
-            foreach ($key in $current.Keys) {
-                if ($key -eq $segment) {
-                    $current = $current[$key]
-                    $foundKey = $true
-                    break
-                }
-            }
-
-            if ($foundKey) { continue }
-        }
-
-        return $null
-    }
-
-    return $current
-}
-
 function Get-SafeErrorFragment {
     param(
         [string]$ErrorText

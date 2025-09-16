@@ -49,6 +49,68 @@ function Get-ElasticErrorMessage {
     return $message
 }
 
+function Get-ElasticSourceValue {
+    <#
+    .SYNOPSIS
+        Retrieve a nested value from an Elasticsearch _source document using dotted paths.
+
+    .DESCRIPTION
+        Traverses PSCustomObjects and dictionary-like structures according to the supplied
+        field path segments. Returns $null as soon as a segment cannot be resolved so callers
+        can gracefully handle missing fields without throwing.
+
+    .PARAMETER Source
+        The _source object (typically a PSCustomObject) to traverse.
+
+    .PARAMETER FieldPath
+        Dotted field path (for example "BK._STATUS_TEXT") describing the value to retrieve.
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        [object]$Source,
+
+        [Parameter(Mandatory=$false)]
+        [string]$FieldPath
+    )
+
+    if (-not $Source -or [string]::IsNullOrWhiteSpace($FieldPath)) {
+        return $null
+    }
+
+    $current = $Source
+    foreach ($segment in $FieldPath -split '\.') {
+        if ($null -eq $current) { return $null }
+
+        $prop = $current.PSObject.Properties[$segment]
+        if ($prop) {
+            $current = $prop.Value
+            continue
+        }
+
+        if ($current -is [System.Collections.IDictionary]) {
+            if ($current.Contains($segment)) {
+                $current = $current[$segment]
+                continue
+            }
+
+            $foundKey = $false
+            foreach ($key in $current.Keys) {
+                if ($key -eq $segment) {
+                    $current = $current[$key]
+                    $foundKey = $true
+                    break
+                }
+            }
+
+            if ($foundKey) { continue }
+        }
+
+        return $null
+    }
+
+    return $current
+}
+
 function Invoke-ElasticScrollSearch {
     [CmdletBinding()]
     param(
