@@ -165,7 +165,7 @@ $scrollUri = "$(([uri]$ElasticUrl).Scheme)://$(([uri]$ElasticUrl).Authority)/_se
 
 $rawHits = New-Object System.Collections.Generic.List[pscustomobject]
 try {
-    $resp = Invoke-RestMethod -Method Post -Uri $searchUri -Headers $headers -Body $body -TimeoutSec 120
+    $resp = Invoke-RestMethod -Method Post -Uri $searchUri -Headers $headers -Body $body -ContentType 'application/json' -TimeoutSec 120
     if ($resp.error) {
         Write-Error "Elasticsearch error: $($resp.error.type) - $($resp.error.reason)"
         return
@@ -175,7 +175,7 @@ try {
     foreach ($h in $hits) { $rawHits.Add($h) }
     while ($hits.Count -gt 0) {
         $scrollBody = @{ scroll = '1m'; scroll_id = $scrollId } | ConvertTo-Json
-        $sresp = Invoke-RestMethod -Method Post -Uri $scrollUri -Headers $headers -Body $scrollBody -TimeoutSec 120
+        $sresp = Invoke-RestMethod -Method Post -Uri $scrollUri -Headers $headers -Body $scrollBody -ContentType 'application/json' -TimeoutSec 120
         if ($sresp.error) {
             Write-Error "Elasticsearch scroll error: $($sresp.error.type) - $($sresp.error.reason)"
             break
