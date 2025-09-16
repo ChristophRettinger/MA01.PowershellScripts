@@ -213,7 +213,7 @@ function Get-MessagePartNodes {
     foreach ($candidate in $candidates) {
         $srcAttribute = $candidate.Attributes['src']
         if ($srcAttribute -and $srcAttribute.Value.StartsWith($MessagePart, [System.StringComparison]::Ordinal)) {
-            $matches += $candidate
+            $matches += $candidate.SelectNodes("*[1]")
         }
     }
 
@@ -279,7 +279,7 @@ function New-ErrorXmlDocument {
 
             $selectedNodes = @()
             if ($MessagePart) {
-                $selectedNodes = Get-MessagePartNodes -Document $messageXml -MessagePart $MessagePart
+                [array]$selectedNodes = Get-MessagePartNodes -Document $messageXml -MessagePart $MessagePart
             }
 
             if ($selectedNodes.Count -gt 0) {
