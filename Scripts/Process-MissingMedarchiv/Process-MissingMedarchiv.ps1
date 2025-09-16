@@ -34,7 +34,7 @@
 
 .PARAMETER ElasticUrl
     Full Elasticsearch _search URL (including index pattern and query params).
-    Defaults to 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search?batched_reduce_size=64&ccs_minimize_roundtrips=true&ignore_unavailable=true&preference=1722936418923'.
+    Defaults to 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search'.
 
 .PARAMETER MappingCsvPath
     Path to the CSV containing database-to-elastic name mappings. Defaults to
@@ -84,7 +84,7 @@ param(
     [string]$Anstalt,
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search?batched_reduce_size=64&ccs_minimize_roundtrips=true&ignore_unavailable=true&preference=1722936418923',
+    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
 
     [Parameter(Mandatory=$false)]
     [string]$MappingCsvPath = (Join-Path -Path $PSScriptRoot -ChildPath 'DatabaseMappings.csv'),

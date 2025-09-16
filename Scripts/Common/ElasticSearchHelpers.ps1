@@ -84,9 +84,9 @@ function Invoke-ElasticScrollSearch {
     }
 
     $searchUri = if ($ElasticUrl -match '\?') {
-        "$ElasticUrl&scroll=$ScrollKeepAlive"
+        "$($ElasticUrl)&scroll=$ScrollKeepAlive"
     } else {
-        "$ElasticUrl?scroll=$ScrollKeepAlive"
+        "$($ElasticUrl)?scroll=$ScrollKeepAlive"
     }
 
     $uri = [System.Uri]$ElasticUrl
