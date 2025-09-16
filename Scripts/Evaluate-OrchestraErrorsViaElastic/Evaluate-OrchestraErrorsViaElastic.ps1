@@ -168,6 +168,50 @@ if ($BusinessKeys) {
     }
 }
 
+function Get-ElasticSourceValue {
+    param(
+        [object]$Source,
+        [string]$FieldPath
+    )
+
+    if (-not $Source -or [string]::IsNullOrWhiteSpace($FieldPath)) {
+        return $null
+    }
+
+    $current = $Source
+    foreach ($segment in $FieldPath -split '\.') {
+        if ($null -eq $current) { return $null }
+
+        $prop = $current.PSObject.Properties[$segment]
+        if ($prop) {
+            $current = $prop.Value
+            continue
+        }
+
+        if ($current -is [System.Collections.IDictionary]) {
+            if ($current.Contains($segment)) {
+                $current = $current[$segment]
+                continue
+            }
+
+            $foundKey = $false
+            foreach ($key in $current.Keys) {
+                if ($key -eq $segment) {
+                    $current = $current[$key]
+                    $foundKey = $true
+                    break
+                }
+            }
+
+            if ($foundKey) { continue }
+        }
+
+        return $null
+    }
+
+    return $current
+}
+
 function Get-SafeErrorFragment {
     param(
         [string]$ErrorText
@@ -389,11 +433,15 @@ if ($rawHits.Count -eq 0) {
 # Extract error text, apply replacements, and build normalized items
 $items = foreach ($r in $rawHits) {
     $src = $r._source
-    $err = $src.'BK._STATUS_TEXT'
-    if ([string]::IsNullOrWhiteSpace($err)) { $err = $src.'BK._ERROR_TEXT' }
-    if ([string]::IsNullOrWhiteSpace($err) -and $src.WorkflowMessage1) {
+    $err = Get-ElasticSourceValue -Source $src -FieldPath 'BK._STATUS_TEXT'
+    if ([string]::IsNullOrWhiteSpace($err)) {
+        $err = Get-ElasticSourceValue -Source $src -FieldPath 'BK._ERROR_TEXT'
+    }
+
+    $workflowMessage = Get-ElasticSourceValue -Source $src -FieldPath 'WorkflowMessage1'
+    if ([string]::IsNullOrWhiteSpace($err) -and $workflowMessage) {
         try {
-            [xml]$xml = $src.WorkflowMessage1
+            [xml]$xml = $workflowMessage
             $node = $xml.SelectSingleNode('//ErrorString')
             if ($node) { $err = $node.InnerText }
         } catch {}
@@ -411,17 +459,14 @@ $items = foreach ($r in $rawHits) {
         } catch {}
     }
 
-    $messageProp = $src.PSObject.Properties['MessageData1']
-    $message = if ($messageProp) { $messageProp.Value } else { $null }
+    $message = Get-ElasticSourceValue -Source $src -FieldPath 'MessageData1'
 
     $keyValues = [ordered]@{}
     foreach ($bk in $effectiveBusinessKeys) {
-        $prop = $src.PSObject.Properties[$bk]
-        $keyValues[$bk] = if ($prop) { $prop.Value } else { $null }
+        $keyValues[$bk] = Get-ElasticSourceValue -Source $src -FieldPath $bk
     }
 
-    $timestampProp = $src.PSObject.Properties['@timestamp']
-    $timestamp = if ($timestampProp) { $timestampProp.Value } else { $null }
+    $timestamp = Get-ElasticSourceValue -Source $src -FieldPath '@timestamp'
 
     [pscustomobject]@{
         NormalizedError = $normalizedError
