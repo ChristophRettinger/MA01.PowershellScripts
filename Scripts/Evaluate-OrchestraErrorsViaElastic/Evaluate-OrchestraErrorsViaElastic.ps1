@@ -159,7 +159,7 @@ $body = @{
 } | ConvertTo-Json -Depth 6
 
 # Perform initial search with scrolling
-$searchUri = if ($ElasticUrl -match '\?') { "$ElasticUrl&scroll=1m" } else { "$ElasticUrl?scroll=1m" }
+$searchUri = if ($ElasticUrl -match '\?') { "$($ElasticUrl)&scroll=1m" } else { "$($ElasticUrl)?scroll=1m" }
 
 $scrollUri = "$(([uri]$ElasticUrl).Scheme)://$(([uri]$ElasticUrl).Authority)/_search/scroll"
 
