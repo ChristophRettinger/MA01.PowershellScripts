@@ -17,8 +17,12 @@
     stays consistent across scripts. Depending on the chosen mode, matching
     documents can also be written to disk:
       - Overview : only show the summary table (default)
-      - All      : create a JSON file for every error occurrence
-      - OneOfType: create a JSON file for each unique error text containing all occurrences
+      - All      : create a JSON file for every error occurrence containing only
+                   `Timestamp`, `ErrorMessage`, `Message`, and `Keys`
+      - OneOfType: create a JSON file for each unique error text containing an
+                   array with the same limited fields as above
+    Output files include the first 20 characters of the normalized error text,
+    the current date, and a counter to guarantee unique file names.
 
 .PARAMETER StartDate
     Inclusive start date for @timestamp filtering (local time). Defaults to today's
@@ -58,6 +62,11 @@
     used to normalize error messages. `Condition` is an optional regex pattern that
     must match the error text for the replacement to be applied.
 
+.PARAMETER BusinessKeys
+    List of fields to extract from the Elasticsearch document and embed under the
+    `Keys` property of generated files. Defaults to `BK._CASENO_ISH` and
+    `BusinessCaseId`.
+
 .EXAMPLE
     ./Evaluate-OrchestraErrorsViaElastic.ps1 -ScenarioName MyScenario `
         -Environment production -ElasticApiKeyPath ~/.eskey
@@ -96,7 +105,10 @@ param(
     [string]$Mode = 'Overview',
 
     [Parameter(Mandatory=$false)]
-    [string]$Configuration = (Join-Path -Path $PSScriptRoot -ChildPath 'Evaluate-OrchestraErrorsViaElastic.config.json')
+    [string]$Configuration = (Join-Path -Path $PSScriptRoot -ChildPath 'Evaluate-OrchestraErrorsViaElastic.config.json'),
+
+    [Parameter(Mandatory=$false)]
+    [string[]]$BusinessKeys = @('BK._CASENO_ISH','BusinessCaseId')
 )
 
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
@@ -136,6 +148,40 @@ if (Test-Path $Configuration) {
     }
 }
 
+$effectiveBusinessKeys = @()
+if ($BusinessKeys) {
+    foreach ($bk in $BusinessKeys) {
+        if ([string]::IsNullOrWhiteSpace($bk)) { continue }
+        if ($effectiveBusinessKeys -notcontains $bk) { $effectiveBusinessKeys += $bk }
+    }
+}
+
+function Get-SafeErrorFragment {
+    param(
+        [string]$ErrorText
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ErrorText)) { $ErrorText = 'error' }
+    $fragment = if ($ErrorText.Length -gt 20) { $ErrorText.Substring(0,20) } else { $ErrorText }
+    $safe = [regex]::Replace($fragment, '[^a-zA-Z0-9_-]', '_')
+    if ([string]::IsNullOrWhiteSpace($safe)) { $safe = 'error' }
+    return $safe
+}
+
+function Get-KeysSnapshot {
+    param(
+        [object]$Keys
+    )
+
+    $snapshot = [ordered]@{}
+    if ($null -ne $Keys) {
+        foreach ($entry in $Keys.GetEnumerator()) {
+            $snapshot[$entry.Key] = $entry.Value
+        }
+    }
+    return $snapshot
+}
+
 # Compose Elasticsearch query filters
 $scenarioFragment = $ScenarioName.Replace('*','\*').Replace('?','\?')
 $scenarioWildcard = "*$scenarioFragment*"
@@ -159,13 +205,17 @@ $range = @{ gte = $StartDate.ToUniversalTime().ToString('o') }
 if ($includeEnd) { $range.lte = $EndDate.ToUniversalTime().ToString('o') }
 $filters += @{ range = @{ '@timestamp' = $range } }
 
+$sourceFields = @(
+    '@timestamp','ScenarioName','Environment','Instance','WorkflowPattern',
+    'BK._STATUS_TEXT','BK._ERROR_TEXT','WorkflowMessage1','MessageData1'
+) + $effectiveBusinessKeys
+
+$sourceFields = $sourceFields | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
 $body = @{
     size = 1000
     query = @{ bool = @{ filter = $filters } }
-    _source = @(
-        '@timestamp','ScenarioName','Environment','Instance','WorkflowPattern',
-        'BK._STATUS_TEXT','BK._ERROR_TEXT','WorkflowMessage1'
-    )
+    _source = $sourceFields
 } | ConvertTo-Json -Depth 6
 
 # Retrieve search hits via the shared scroll helper
@@ -194,22 +244,42 @@ $items = foreach ($r in $rawHits) {
         } catch {}
     }
     if ([string]::IsNullOrWhiteSpace($err)) { $err = '(unknown error)' }
+
+    $originalError = $err
+    $normalizedError = $originalError
+
     foreach ($rep in $replacements) {
         try {
-            if (-not $rep.Condition -or [regex]::IsMatch($err, $rep.Condition)) {
-                $err = [regex]::Replace($err, $rep.Pattern, $rep.Replacement)
+            if (-not $rep.Condition -or [regex]::IsMatch($normalizedError, $rep.Condition)) {
+                $normalizedError = [regex]::Replace($normalizedError, $rep.Pattern, $rep.Replacement)
             }
         } catch {}
     }
+
+    $messageProp = $src.PSObject.Properties['MessageData1']
+    $message = if ($messageProp) { $messageProp.Value } else { $null }
+
+    $keyValues = [ordered]@{}
+    foreach ($bk in $effectiveBusinessKeys) {
+        $prop = $src.PSObject.Properties[$bk]
+        $keyValues[$bk] = if ($prop) { $prop.Value } else { $null }
+    }
+
+    $timestampProp = $src.PSObject.Properties['@timestamp']
+    $timestamp = if ($timestampProp) { $timestampProp.Value } else { $null }
+
     [pscustomobject]@{
-        Error  = $err
-        Source = $src
+        NormalizedError = $normalizedError
+        OriginalError   = $originalError
+        Timestamp       = $timestamp
+        Message         = $message
+        Keys            = $keyValues
     }
 }
 
-$groups = $items | Group-Object -Property Error | Sort-Object Count -Descending
+$groups = $items | Group-Object -Property NormalizedError | Sort-Object Count -Descending
 
-$groups | Select-Object @{Name='ErrorText';Expression={$_.Name}}, @{Name='Instances';Expression={$_.Count}} | Format-Table -AutoSize
+$groups | Select-Object @{Name='Count';Expression={$_.Count}}, @{Name='Error';Expression={$_.Name}} | Format-Table -AutoSize
 
 # Handle output modes
 if ($Mode -ne 'Overview') {
@@ -217,20 +287,40 @@ if ($Mode -ne 'Overview') {
         $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
     }
 
+    $datePrefix = Get-Date -Format 'yyyyMMdd'
+
     if ($Mode -eq 'All') {
-        $i = 0
+        $counter = 1
         foreach ($it in $items) {
-            $safe = [regex]::Replace($it.Error, '[^a-zA-Z0-9_-]', '_')
-            $timestamp = Get-Date -Format 'yyyyMMddHHmmssfff'
-            $file = Join-Path $OutputDirectory "$timestamp`_$i`_$safe.json"
-            $it.Source | ConvertTo-Json -Depth 10 | Set-Content -Path $file -Encoding UTF8
-            $i++
+            $fragment = Get-SafeErrorFragment -ErrorText $it.NormalizedError
+            $fileName = '{0}_{1:D4}_{2}.json' -f $datePrefix, $counter, $fragment
+            $filePath = Join-Path $OutputDirectory $fileName
+            $payload = [ordered]@{
+                Timestamp    = $it.Timestamp
+                ErrorMessage = $it.OriginalError
+                Message      = $it.Message
+                Keys         = Get-KeysSnapshot -Keys $it.Keys
+            }
+            $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $filePath -Encoding UTF8
+            $counter++
         }
     } elseif ($Mode -eq 'OneOfType') {
+        $counter = 1
         foreach ($g in $groups) {
-            $safe = [regex]::Replace($g.Name, '[^a-zA-Z0-9_-]', '_')
-            $file = Join-Path $OutputDirectory "$safe.json"
-            ($g.Group | ForEach-Object { $_.Source }) | ConvertTo-Json -Depth 10 | Set-Content -Path $file -Encoding UTF8
+            $fragment = Get-SafeErrorFragment -ErrorText $g.Name
+            $fileName = '{0}_{1:D4}_{2}.json' -f $datePrefix, $counter, $fragment
+            $filePath = Join-Path $OutputDirectory $fileName
+            $payload = @()
+            foreach ($entry in $g.Group) {
+                $payload += [ordered]@{
+                    Timestamp    = $entry.Timestamp
+                    ErrorMessage = $entry.OriginalError
+                    Message      = $entry.Message
+                    Keys         = Get-KeysSnapshot -Keys $entry.Keys
+                }
+            }
+            $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $filePath -Encoding UTF8
+            $counter++
         }
     }
 }
