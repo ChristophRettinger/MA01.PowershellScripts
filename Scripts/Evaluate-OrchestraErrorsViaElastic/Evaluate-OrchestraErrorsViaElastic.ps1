@@ -20,7 +20,8 @@
       - All      : create a formatted XML file for every error occurrence containing
                    the `Timestamp`, the original `ErrorMessage`, selected `Keys`,
                    and the message content embedded as XML nodes (optionally
-                   filtered by `MessagePart`)
+                   filtered by `MessagePart`, which keeps elements whose
+                   `@src` attribute starts with the supplied value)
       - OneOfType: create a formatted XML file for each unique error text containing
                    only the first matching error occurrence with the same structure as above.
     Output files include the first 20 characters of the normalized error text,
@@ -66,8 +67,9 @@
 
 .PARAMETER MessagePart
     Optional message identifier. When provided, the XML files written by modes All or
-    OneOfType include only the message nodes that match the XPath
-    `//Data[@src="MessagePart"]` instead of the full message payload.
+    OneOfType include only the message nodes whose `@src` attribute starts with the
+    supplied value (equivalent to using `starts-with(@src,'MessagePart')` in XPath),
+    keeping the filtered nodes embedded as XML instead of the full message payload.
 
 .PARAMETER BusinessKeys
     List of fields to extract from the Elasticsearch document and embed under the
@@ -192,6 +194,32 @@ function Get-KeysSnapshot {
     return $snapshot
 }
 
+function Get-MessagePartNodes {
+    param(
+        [System.Xml.XmlDocument]$Document,
+        [string]$MessagePart
+    )
+
+    $matches = @()
+    if (-not $Document -or [string]::IsNullOrEmpty($MessagePart)) {
+        return $matches
+    }
+
+    $candidates = $Document.SelectNodes("//*[local-name()='Data' and @src]")
+    if (-not $candidates) {
+        return $matches
+    }
+
+    foreach ($candidate in $candidates) {
+        $srcAttribute = $candidate.Attributes['src']
+        if ($srcAttribute -and $srcAttribute.Value.StartsWith($MessagePart, [System.StringComparison]::Ordinal)) {
+            $matches += $candidate
+        }
+    }
+
+    return $matches
+}
+
 function New-ErrorXmlDocument {
     param(
         [object]$Keys,
@@ -249,18 +277,12 @@ function New-ErrorXmlDocument {
             $messageXml = New-Object System.Xml.XmlDocument
             $messageXml.LoadXml($MessageText)
 
-            $selectedNodes = $null
+            $selectedNodes = @()
             if ($MessagePart) {
-                $escapedPart = $MessagePart.Replace("'","''")
-                $xpath = "//Data[@src='$escapedPart']"
-                $selectedNodes = $messageXml.SelectNodes($xpath)
-                if (-not $selectedNodes -or $selectedNodes.Count -eq 0) {
-                    $localNameXPath = "//*[local-name()='Data' and @src='$escapedPart']"
-                    $selectedNodes = $messageXml.SelectNodes($localNameXPath)
-                }
+                $selectedNodes = Get-MessagePartNodes -Document $messageXml -MessagePart $MessagePart
             }
 
-            if ($selectedNodes -and $selectedNodes.Count -gt 0) {
+            if ($selectedNodes.Count -gt 0) {
                 foreach ($node in $selectedNodes) {
                     if ($node) {
                         $imported = $doc.ImportNode($node, $true)
