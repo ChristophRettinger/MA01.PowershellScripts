@@ -10,7 +10,9 @@
     
     The mapping between on-prem database names and Elasticsearch index names is
     provided via a CSV (columns: Anstalt,DatabaseName,ElasticName). By default, the
-    script loads `DatabaseMappings.csv` from the script folder.
+    script loads `DatabaseMappings.csv` from the script folder. Elasticsearch paging
+    reuses the Invoke-ElasticScrollSearch helper from Scripts/Common/ElasticSearchHelpers.ps1
+    to keep scroll handling consistent between scripts.
 
 .PARAMETER StartDate
     The inclusive start date used to filter PROCESSINGTIME (DB) and the time field in Elasticsearch.
@@ -105,6 +107,13 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output')
 )
+
+$sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
+$sharedHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ElasticSearchHelpers.ps1'
+if (-not (Test-Path -Path $sharedHelpersPath)) {
+    throw "Shared Elastic helper not found at '$sharedHelpersPath'."
+}
+. $sharedHelpersPath
 
 # Determine effective StartDate/EndDate defaults for whole current day if omitted
 $includeEndDate = $PSBoundParameters.ContainsKey('EndDate')
@@ -216,6 +225,7 @@ foreach ($map in $targetMappings) {
 
     $esMin = $null; $esMax = $null; $esCount = $null
     $esDistinct = $null
+    $esQuerySucceeded = $false
     if ($IncludeElastic -and $apiKey -and $dbCount -and $dbCount -gt 0) {
         try {
             Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'ES initial search' -PercentComplete 50
@@ -234,92 +244,52 @@ foreach ($map in $targetMappings) {
             }
             $filters += @{ range = @{ $ElasticTimeField = $range } }
 
-            $esBody = @{ 
+            $esBody = @{
                 size = 1000
                 query = @{ bool = @{ filter = $filters } }
                 _source = @('BK.SUBFL_sourceid')
             } | ConvertTo-Json -Depth 6
-            
-            # Ensure scroll param on the search URL
-            $searchUri = if ($ElasticUrl -match '\?') { "$ElasticUrl&scroll=1m" } else { "$ElasticUrl?scroll=1m" }
-
-            $ids = New-Object System.Collections.Generic.List[string]
-
-            $esResponse = Invoke-RestMethod -Method Post -Uri $searchUri -Headers $headers -Body $esBody -TimeoutSec 120
-            if ($esResponse.error) {
-                $etype = $esResponse.error.type
-                $ereason = $esResponse.error.reason
-                Write-Error "[$anst/$elasticName] Elasticsearch error: $etype - $ereason"
-            } else {
-                $scrollId = $esResponse._scroll_id
-                $hits = @($esResponse.hits.hits)
-                $page = 0
-                foreach ($h in $hits) {
-                    $val = $h._source.BK.SUBFL_sourceid
-                    if ($null -ne $val -and "$val" -ne '') { [void]$ids.Add([string]$val) }
-                }
-                $page++
-                $pc = 60 + [int]([Math]::Min(35, $page*5))
-                Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status "ES scrolling (page $page) collected $($ids.Count)" -PercentComplete $pc
-
-                if ($scrollId) {
-                    # Derive scroll endpoint
-                    $u = [System.Uri]$ElasticUrl
-                    $scrollUri = "$($u.Scheme)://$($u.Authority)/_search/scroll"
-                    while ($hits.Count -gt 0) {
-                        $scrollBody = @{ scroll = '1m'; scroll_id = $scrollId } | ConvertTo-Json -Depth 3
-                        $scrollResp = Invoke-RestMethod -Method Post -Uri $scrollUri -Headers $headers -Body $scrollBody -TimeoutSec 120
-                        if ($scrollResp.error) {
-                            Write-Error "[$anst/$elasticName] Elasticsearch scroll error: $($scrollResp.error.type) - $($scrollResp.error.reason)"
-                            break
-                        }
-                        $scrollId = $scrollResp._scroll_id
-                        $hits = @($scrollResp.hits.hits)
-                        if (-not $hits -or $hits.Count -eq 0) { break }
-                        foreach ($h in $hits) {
-                            $val = $h._source.BK.SUBFL_sourceid
-                            if ($null -ne $val -and "$val" -ne '') { [void]$ids.Add([string]$val) }
-                        }
-                        $page++
-                        $pc = 60 + [int]([Math]::Min(35, $page*5))
-                        Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status "ES scrolling (page $page) collected $($ids.Count)" -PercentComplete $pc
-                    }
-                }
-
-                # Distinct IDs and compute min/max/count
-                $distinct = $ids | Where-Object { $_ } | Select-Object -Unique
-                $esDistinct = $distinct
-                $esCount = ($distinct | Measure-Object).Count
-
-                # Try numeric min/max, fallback to string ordering
-                $nums = @()
-                foreach ($s in $distinct) { $n = 0L; if ([long]::TryParse($s, [ref]$n)) { $nums += $n } }
-                if ($nums.Count -gt 0) {
-                    $esMin = ($nums | Measure-Object -Minimum).Minimum
-                    $esMax = ($nums | Measure-Object -Maximum).Maximum
-                } elseif ($distinct.Count -gt 0) {
-                    $sorted = $distinct | Sort-Object
-                    $esMin = $sorted[0]
-                    $esMax = $sorted[-1]
-                }
-                Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'ES aggregation done' -PercentComplete 95
+            $pageProgress = {
+                param($PageNumber, $PageHits, $TotalHits)
+                $pcInner = 60 + [int]([Math]::Min(35, $PageNumber * 5))
+                $statusText = "ES scrolling (page $PageNumber) collected $TotalHits"
+                Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status $statusText -PercentComplete $pcInner
             }
+
+            $rawHits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $esBody -TimeoutSec 120 -OnPage $pageProgress
+
+            $ids = [System.Collections.Generic.List[string]]::new()
+            foreach ($hit in $rawHits) {
+                $val = $hit._source.BK.SUBFL_sourceid
+                if ($null -ne $val -and "$val" -ne '') { [void]$ids.Add([string]$val) }
+            }
+
+            # Distinct IDs and compute min/max/count
+            $distinct = $ids | Where-Object { $_ } | Select-Object -Unique
+            $esDistinct = $distinct
+            $esCount = ($distinct | Measure-Object).Count
+
+            # Try numeric min/max, fallback to string ordering
+            $nums = @()
+            foreach ($s in $distinct) { $n = 0L; if ([long]::TryParse($s, [ref]$n)) { $nums += $n } }
+            if ($nums.Count -gt 0) {
+                $esMin = ($nums | Measure-Object -Minimum).Minimum
+                $esMax = ($nums | Measure-Object -Maximum).Maximum
+            } elseif ($distinct.Count -gt 0) {
+                $sorted = $distinct | Sort-Object
+                $esMin = $sorted[0]
+                $esMax = $sorted[-1]
+            }
+            Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'ES aggregation done' -PercentComplete 95
+            $esQuerySucceeded = $true
         }
         catch {
-            # Emit error with response body if available
-            $msg = $_.Exception.Message
-            try {
-                $resp = $_.Exception.Response
-                if ($resp) {
-                    $rs = $resp.GetResponseStream(); if ($rs) { $sr = New-Object System.IO.StreamReader($rs); $body = $sr.ReadToEnd(); $sr.Dispose(); if ($body) { $msg = "$msg Response: $body" } }
-                }
-            } catch {}
-            Write-Error "[$anst/$elasticName] Elasticsearch query failed: $msg"
+            Write-Error "[$anst/$elasticName] Elasticsearch query failed: $($_.Exception.Message)"
         }
     }
 
     # If counts differ, compute and write missing IDs present in DB but not in ES
-    if ($IncludeElastic -and $apiKey -and $dbCount -ne $esCount) {
+    if ($IncludeElastic -and $apiKey -and $esQuerySucceeded -and $dbCount -ne $esCount) {
         try {
             Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'Computing missing IDs' -PercentComplete 96
 
