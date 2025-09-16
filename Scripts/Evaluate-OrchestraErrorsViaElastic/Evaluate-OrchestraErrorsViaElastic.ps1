@@ -25,10 +25,10 @@
     Inclusive end date for @timestamp filtering (local time).
 
 .PARAMETER ScenarioName
-    Name of the scenario to filter in Elasticsearch.
+    Name (or substring) of the scenario to filter in Elasticsearch.
 
 .PARAMETER Environment
-    Environment value to match (production, staging, testing).
+    Environment value to match (production, staging, testing). Defaults to production.
 
 .PARAMETER Instance
     Specific server instance name to filter (optional).
@@ -69,9 +69,9 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$ScenarioName,
 
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
     [ValidateSet('production','staging','testing')]
-    [string]$Environment,
+    [string]$Environment = 'production',
 
     [Parameter(Mandatory=$false)]
     [string]$Instance,
@@ -127,8 +127,19 @@ if (Test-Path $Configuration) {
 }
 
 # Compose Elasticsearch query filters
+$scenarioFragment = $ScenarioName.Replace('*','\*').Replace('?','\?')
+$scenarioWildcard = "*$scenarioFragment*"
+$scenarioFilter = @{
+    wildcard = @{
+        'ScenarioName' = @{
+            value = $scenarioWildcard
+            case_insensitive = $true
+        }
+    }
+}
+
 $filters = @(
-    @{ term = @{ 'ScenarioName' = $ScenarioName } },
+    $scenarioFilter,
     @{ term = @{ 'Environment' = $Environment } },
     @{ term = @{ 'WorkflowPattern' = 'ERROR' } }
 )
@@ -149,7 +160,8 @@ $body = @{
 
 # Perform initial search with scrolling
 $searchUri = if ($ElasticUrl -match '\?') { "$ElasticUrl&scroll=1m" } else { "$ElasticUrl?scroll=1m" }
-$scrollUri = "$([uri]$ElasticUrl).Scheme://$([uri]$ElasticUrl).Authority/_search/scroll"
+
+$scrollUri = "$(([uri]$ElasticUrl).Scheme)://$(([uri]$ElasticUrl).Authority)/_search/scroll"
 
 $rawHits = New-Object System.Collections.Generic.List[pscustomobject]
 try {
