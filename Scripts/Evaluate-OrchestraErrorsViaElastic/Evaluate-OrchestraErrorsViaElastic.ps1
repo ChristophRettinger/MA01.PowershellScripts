@@ -17,10 +17,12 @@
     stays consistent across scripts. Depending on the chosen mode, matching
     documents can also be written to disk:
       - Overview : only show the summary table (default)
-      - All      : create a JSON file for every error occurrence containing only
-                   `Timestamp`, `ErrorMessage`, `Message`, and `Keys`
-      - OneOfType: create a JSON file for each unique error text containing an
-                   array with the same limited fields as above
+      - All      : create a formatted XML file for every error occurrence containing
+                   the `Timestamp`, the original `ErrorMessage`, selected `Keys`,
+                   and the message content embedded as XML nodes (optionally
+                   filtered by `MessagePart`)
+      - OneOfType: create a formatted XML file for each unique error text containing
+                   only the first matching error occurrence with the same structure as above.
     Output files include the first 20 characters of the normalized error text,
     the current date, and a counter to guarantee unique file names.
 
@@ -61,6 +63,11 @@
     an array of objects `{ "Pattern": "...", "Replacement": "...", "Condition": "..." }`
     used to normalize error messages. `Condition` is an optional regex pattern that
     must match the error text for the replacement to be applied.
+
+.PARAMETER MessagePart
+    Optional message identifier. When provided, the XML files written by modes All or
+    OneOfType include only the message nodes that match the XPath
+    `//Data[@src="MessagePart"]` instead of the full message payload.
 
 .PARAMETER BusinessKeys
     List of fields to extract from the Elasticsearch document and embed under the
@@ -106,6 +113,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string]$Configuration = (Join-Path -Path $PSScriptRoot -ChildPath 'Evaluate-OrchestraErrorsViaElastic.config.json'),
+
+    [Parameter(Mandatory=$false)]
+    [string]$MessagePart,
 
     [Parameter(Mandatory=$false)]
     [string[]]$BusinessKeys = @('BK._CASENO_ISH','BusinessCaseId')
@@ -180,6 +190,129 @@ function Get-KeysSnapshot {
         }
     }
     return $snapshot
+}
+
+function New-ErrorXmlDocument {
+    param(
+        [object]$Keys,
+        [object]$Timestamp,
+        [string]$ErrorMessage,
+        [string]$MessageText,
+        [string]$MessagePart
+    )
+
+    $doc = New-Object System.Xml.XmlDocument
+    $declaration = $doc.CreateXmlDeclaration('1.0','utf-8',$null)
+    $null = $doc.AppendChild($declaration)
+
+    $root = $doc.CreateElement('Error')
+    $null = $doc.AppendChild($root)
+
+    $timestampValue = $null
+    if ($null -ne $Timestamp) {
+        if ($Timestamp -is [datetime]) {
+            $timestampValue = $Timestamp.ToString('o')
+        } elseif ($Timestamp -is [datetimeoffset]) {
+            $timestampValue = $Timestamp.ToString('o')
+        } else {
+            $timestampValue = [string]$Timestamp
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($timestampValue)) {
+        $timestampElement = $doc.CreateElement('Timestamp')
+        $timestampElement.InnerText = $timestampValue
+        $null = $root.AppendChild($timestampElement)
+    }
+
+    $errorElement = $doc.CreateElement('ErrorMessage')
+    if ($null -ne $ErrorMessage) {
+        $errorElement.InnerText = [string]$ErrorMessage
+    }
+    $null = $root.AppendChild($errorElement)
+
+    $keysElement = $doc.CreateElement('Keys')
+    $keysSnapshot = Get-KeysSnapshot -Keys $Keys
+    foreach ($entry in $keysSnapshot.GetEnumerator()) {
+        $keyElement = $doc.CreateElement('Key')
+        $null = $keyElement.SetAttribute('Name', $entry.Key)
+        if ($null -ne $entry.Value) {
+            $keyElement.InnerText = [string]$entry.Value
+        }
+        $null = $keysElement.AppendChild($keyElement)
+    }
+    $null = $root.AppendChild($keysElement)
+
+    $messageElement = $doc.CreateElement('Message')
+    if (-not [string]::IsNullOrWhiteSpace($MessageText)) {
+        try {
+            $messageXml = New-Object System.Xml.XmlDocument
+            $messageXml.LoadXml($MessageText)
+
+            $selectedNodes = $null
+            if ($MessagePart) {
+                $escapedPart = $MessagePart.Replace("'","''")
+                $xpath = "//Data[@src='$escapedPart']"
+                $selectedNodes = $messageXml.SelectNodes($xpath)
+                if (-not $selectedNodes -or $selectedNodes.Count -eq 0) {
+                    $localNameXPath = "//*[local-name()='Data' and @src='$escapedPart']"
+                    $selectedNodes = $messageXml.SelectNodes($localNameXPath)
+                }
+            }
+
+            if ($selectedNodes -and $selectedNodes.Count -gt 0) {
+                foreach ($node in $selectedNodes) {
+                    if ($node) {
+                        $imported = $doc.ImportNode($node, $true)
+                        $null = $messageElement.AppendChild($imported)
+                    }
+                }
+            } elseif ($messageXml.DocumentElement) {
+                $documentElement = $messageXml.DocumentElement
+                $childNodesAdded = $false
+                if ($documentElement.LocalName -eq 'Message' -and $documentElement.HasChildNodes) {
+                    foreach ($child in $documentElement.ChildNodes) {
+                        $importedChild = $doc.ImportNode($child, $true)
+                        $null = $messageElement.AppendChild($importedChild)
+                        $childNodesAdded = $true
+                    }
+                }
+
+                if (-not $childNodesAdded) {
+                    $importedElement = $doc.ImportNode($documentElement, $true)
+                    $null = $messageElement.AppendChild($importedElement)
+                }
+            } else {
+                $messageElement.InnerText = $MessageText
+            }
+        } catch {
+            $messageElement.InnerText = $MessageText
+        }
+    }
+    $null = $root.AppendChild($messageElement)
+
+    return $doc
+}
+
+function Save-FormattedXmlDocument {
+    param(
+        [System.Xml.XmlDocument]$Document,
+        [string]$Path
+    )
+
+    $settings = New-Object System.Xml.XmlWriterSettings
+    $settings.Indent = $true
+    $settings.IndentChars = '    '
+    $settings.NewLineChars = "`n"
+    $settings.NewLineHandling = [System.Xml.NewLineHandling]::Replace
+    $settings.Encoding = New-Object System.Text.UTF8Encoding($false)
+
+    $writer = [System.Xml.XmlWriter]::Create($Path, $settings)
+    try {
+        $Document.Save($writer)
+    } finally {
+        if ($writer) { $writer.Dispose() }
+    }
 }
 
 # Compose Elasticsearch query filters
@@ -293,33 +426,22 @@ if ($Mode -ne 'Overview') {
         $counter = 1
         foreach ($it in $items) {
             $fragment = Get-SafeErrorFragment -ErrorText $it.NormalizedError
-            $fileName = '{0}_{1:D4}_{2}.json' -f $datePrefix, $counter, $fragment
+            $fileName = '{0}_{1:D4}_{2}.xml' -f $datePrefix, $counter, $fragment
             $filePath = Join-Path $OutputDirectory $fileName
-            $payload = [ordered]@{
-                Timestamp    = $it.Timestamp
-                ErrorMessage = $it.OriginalError
-                Message      = $it.Message
-                Keys         = Get-KeysSnapshot -Keys $it.Keys
-            }
-            $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $filePath -Encoding UTF8
+            $document = New-ErrorXmlDocument -Keys $it.Keys -Timestamp $it.Timestamp -ErrorMessage $it.OriginalError -MessageText $it.Message -MessagePart $MessagePart
+            Save-FormattedXmlDocument -Document $document -Path $filePath
             $counter++
         }
     } elseif ($Mode -eq 'OneOfType') {
         $counter = 1
         foreach ($g in $groups) {
             $fragment = Get-SafeErrorFragment -ErrorText $g.Name
-            $fileName = '{0}_{1:D4}_{2}.json' -f $datePrefix, $counter, $fragment
+            $fileName = '{0}_{1:D4}_{2}.xml' -f $datePrefix, $counter, $fragment
             $filePath = Join-Path $OutputDirectory $fileName
-            $payload = @()
-            foreach ($entry in $g.Group) {
-                $payload += [ordered]@{
-                    Timestamp    = $entry.Timestamp
-                    ErrorMessage = $entry.OriginalError
-                    Message      = $entry.Message
-                    Keys         = Get-KeysSnapshot -Keys $entry.Keys
-                }
-            }
-            $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $filePath -Encoding UTF8
+            $entry = $g.Group | Select-Object -First 1
+            if (-not $entry) { continue }
+            $document = New-ErrorXmlDocument -Keys $entry.Keys -Timestamp $entry.Timestamp -ErrorMessage $entry.OriginalError -MessageText $entry.Message -MessagePart $MessagePart
+            Save-FormattedXmlDocument -Document $document -Path $filePath
             $counter++
         }
     }
