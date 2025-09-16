@@ -12,7 +12,10 @@
     `Pattern`/`Replacement` pair to be applied. An overview table of unique errors
     and their occurrence counts is always written to the console.
 
-    Depending on the chosen mode, matching documents can also be written to disk:
+    Elasticsearch paging is handled by the shared Invoke-ElasticScrollSearch helper
+    located in Scripts/Common/ElasticSearchHelpers.ps1 so that scroll handling
+    stays consistent across scripts. Depending on the chosen mode, matching
+    documents can also be written to disk:
       - Overview : only show the summary table (default)
       - All      : create a JSON file for every error occurrence
       - OneOfType: create a JSON file for each unique error text containing all occurrences
@@ -96,6 +99,13 @@ param(
     [string]$Configuration = (Join-Path -Path $PSScriptRoot -ChildPath 'Evaluate-OrchestraErrorsViaElastic.config.json')
 )
 
+$sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
+$sharedHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ElasticSearchHelpers.ps1'
+if (-not (Test-Path -Path $sharedHelpersPath)) {
+    throw "Shared Elastic helper not found at '$sharedHelpersPath'."
+}
+. $sharedHelpersPath
+
 # Determine default StartDate/EndDate (full day if StartDate omitted)
 $includeEnd = $PSBoundParameters.ContainsKey('EndDate')
 if (-not $PSBoundParameters.ContainsKey('StartDate')) {
@@ -158,35 +168,11 @@ $body = @{
     )
 } | ConvertTo-Json -Depth 6
 
-# Perform initial search with scrolling
-$searchUri = if ($ElasticUrl -match '\?') { "$($ElasticUrl)&scroll=1m" } else { "$($ElasticUrl)?scroll=1m" }
-
-$scrollUri = "$(([uri]$ElasticUrl).Scheme)://$(([uri]$ElasticUrl).Authority)/_search/scroll"
-
-$rawHits = New-Object System.Collections.Generic.List[pscustomobject]
+# Retrieve search hits via the shared scroll helper
 try {
-    $resp = Invoke-RestMethod -Method Post -Uri $searchUri -Headers $headers -Body $body -ContentType 'application/json' -TimeoutSec 120
-    if ($resp.error) {
-        Write-Error "Elasticsearch error: $($resp.error.type) - $($resp.error.reason)"
-        return
-    }
-    $scrollId = $resp._scroll_id
-    $hits = @($resp.hits.hits)
-    foreach ($h in $hits) { $rawHits.Add($h) }
-    while ($hits.Count -gt 0) {
-        $scrollBody = @{ scroll = '1m'; scroll_id = $scrollId } | ConvertTo-Json
-        $sresp = Invoke-RestMethod -Method Post -Uri $scrollUri -Headers $headers -Body $scrollBody -ContentType 'application/json' -TimeoutSec 120
-        if ($sresp.error) {
-            Write-Error "Elasticsearch scroll error: $($sresp.error.type) - $($sresp.error.reason)"
-            break
-        }
-        $scrollId = $sresp._scroll_id
-        $hits = @($sresp.hits.hits)
-        if ($hits.Count -eq 0) { break }
-        foreach ($h in $hits) { $rawHits.Add($h) }
-    }
+    $rawHits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $body -TimeoutSec 120
 } catch {
-    Write-Error "Elasticsearch query failed: $_"
+    Write-Error $_.Exception.Message
     return
 }
 
