@@ -169,9 +169,9 @@ foreach ($pscFile in $pscFiles) {
                 $values = $fieldValues[$field]
                 if ($values.Count -gt 0) {
                     $joined = $values -join ', '
-                    Write-Host "    $field: $joined"
+                    Write-Host "    $($field): $joined"
                 } else {
-                    Write-Host "    $field: (not found)"
+                    Write-Host "    $($field): (not found)"
                 }
             }
         }
