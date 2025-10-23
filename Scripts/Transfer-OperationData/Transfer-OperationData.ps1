@@ -177,7 +177,7 @@ ORDER BY DataStoreId ASC;
                 while ($reader.Read()) {
                     $batchRows += [pscustomobject]@{
                         DataStoreId = [long]$reader['DataStoreId']
-                        ProcessKey  = [string]$reader['ProcessKey']
+                        ProcessKey  = ([string]$reader['ProcessKey'] -replace "/BMI$","")
                         Data1       = $reader['Data1']
                     }
                 }
