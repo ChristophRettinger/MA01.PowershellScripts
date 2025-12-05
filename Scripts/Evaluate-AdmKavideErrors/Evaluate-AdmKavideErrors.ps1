@@ -118,7 +118,7 @@ function Get-ZugangVonKostenstelle {
 }
 
 $filters = @(
-    @{ term = @{ 'ScenarioName.keyword' = 'ITI_SUBFL_KAVIDE_speichern_v01_3287' } },
+    @{ term = @{ 'ScenarioName' = 'ITI_SUBFL_KAVIDE_speichern_v01_3287' } },
     @{ term = @{ 'Environment' = $Environment } },
     @{ term = @{ 'WorkflowPattern' = 'ERROR' } }
 )
