@@ -3,20 +3,21 @@
     Evaluate errors for the KAVIDE ITI_SUBFL scenario via Elasticsearch.
 
 .DESCRIPTION
-    Queries Elasticsearch for error workflow entries of scenario
+    Queries Elasticsearch for all workflow entries of scenario
     ITI_SUBFL_KAVIDE_speichern_v01_3287 within a date range, environment, and
     optional instance. Unique case numbers (BK._CASENO) are determined from the
-    error hits. For each case number the script reports the number of errors,
-    details for the first occurrence (timestamp, BusinessCaseId, BK._STATUS_TEXT
-    error text), and a parsed `ZugangVonKostenstelle` value extracted from
-    MessageData1 (XML). A JSON-serialized list of all error occurrences is
-    included so every error per case number is visible, and `ZugangVonKostenstelle`
-    is evaluated for each error. The script also gathers workflow successes for
-    the same case numbers and summarizes the number of successes grouped by
-    BK.SUBFL_subid, BK.SUBFL_category, and BK.SUBFL_subcategory. Results are
-    written to the console with colored sections showing the case number and the
-    timestamp range (first to last error), followed by successes and individual
-    error details, and exported to a CSV file in the specified OutputDirectory.
+    error hits after retrieval (no error filtering is applied in the query). For
+    each case number the script reports the number of errors, details for the
+    first occurrence (timestamp, BusinessCaseId, BK._STATUS_TEXT error text),
+    and a parsed `ZugangVonKostenstelle` value extracted from MessageData1 (XML).
+    A JSON-serialized list of all error occurrences is included so every error
+    per case number is visible, and `ZugangVonKostenstelle` is evaluated for
+    each error. The script also gathers workflow successes for the same case
+    numbers and summarizes the number of successes grouped by BK.SUBFL_subid,
+    BK.SUBFL_category, and BK.SUBFL_subcategory. Results are written to the
+    console with colored sections showing the case number and the timestamp
+    range (first to last message), followed by successes and individual error
+    details, and exported to a CSV file in the specified OutputDirectory.
 
     An optional ignore list can be supplied via a text file containing one phrase
     per line. Any error whose text contains an ignore phrase is skipped and will
@@ -163,8 +164,7 @@ function Get-ZugangVonKostenstelle {
 
 $filters = @(
     @{ term = @{ 'ScenarioName' = 'ITI_SUBFL_KAVIDE_speichern_v01_3287' } },
-    @{ term = @{ 'Environment' = $Environment } },
-    @{ term = @{ 'WorkflowPattern' = 'ERROR' } }
+    @{ term = @{ 'Environment' = $Environment } }
 )
 if ($Instance) { $filters += @{ term = @{ 'Instance' = $Instance } } }
 
@@ -185,69 +185,61 @@ $body = @{
 } | ConvertTo-Json -Depth 6
 
 try {
-    $errorHits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $body -TimeoutSec 120
+    $allHits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $body -TimeoutSec 120
 } catch {
     Write-Error $_.Exception.Message
     return
 }
 
-if ($errorHits.Count -eq 0) {
+if ($allHits.Count -eq 0) {
     Write-Warning 'No errors found for specified criteria.'
     return
 }
 
+$eventsByCaseno = @{}
 $errorsByCaseno = @{}
-foreach ($hit in $errorHits) {
+$errorsFound = $false
+foreach ($hit in $allHits) {
     $caseNo = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK._CASENO'
     if ([string]::IsNullOrWhiteSpace($caseNo)) { continue }
+    if (-not $eventsByCaseno.ContainsKey($caseNo)) { $eventsByCaseno[$caseNo] = @() }
+    $eventsByCaseno[$caseNo] += $hit
+
+    $workflowPattern = Get-ElasticSourceValue -Source $hit._source -FieldPath 'WorkflowPattern'
+    if ($workflowPattern -ne 'ERROR') { continue }
+
     $statusText = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK._STATUS_TEXT'
     if (Test-IgnoredErrorText -ErrorText $statusText -IgnorePhrases $ignorePhrases) { continue }
     if (-not $errorsByCaseno.ContainsKey($caseNo)) { $errorsByCaseno[$caseNo] = @() }
     $errorsByCaseno[$caseNo] += $hit
+    $errorsFound = $true
+}
+
+if (-not $errorsFound) {
+    Write-Warning 'No errors found for specified criteria.'
+    return
 }
 
 $uniqueCasenos = $errorsByCaseno.Keys
 
-$successFilters = @(
-    @{ term = @{ 'ScenarioName' = 'ITI_SUBFL_KAVIDE_speichern_v01_3287' } },
-    @{ term = @{ 'Environment' = $Environment } },
-    @{ term = @{ 'WorkflowPattern' = 'SUCCESS' } },
-    @{ terms = @{ 'BK._CASENO.keyword' = $uniqueCasenos } }
-)
-if ($Instance) { $successFilters += @{ term = @{ 'Instance' = $Instance } } }
-$successFilters += @{ range = @{ '@timestamp' = $range } }
-
-$successBody = @{
-    size = 1000
-    query = @{ bool = @{ filter = $successFilters } }
-    _source = $sourceFields
-} | ConvertTo-Json -Depth 6
-
-$successHits = @()
-if ($uniqueCasenos.Count -gt 0) {
-    try {
-        $successHits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $successBody -TimeoutSec 120
-    } catch {
-        Write-Warning $_.Exception.Message
-    }
-}
-
 $successCounts = @{}
-foreach ($hit in $successHits) {
-    $caseNo = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK._CASENO'
-    if ([string]::IsNullOrWhiteSpace($caseNo)) { continue }
-    $subId = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_subid'
-    $category = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_category'
-    $subcategory = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_subcategory'
-    $key = "$subId|$category|$subcategory"
-    if (-not $successCounts.ContainsKey($caseNo)) { $successCounts[$caseNo] = @{} }
-    if (-not $successCounts[$caseNo].ContainsKey($key)) { $successCounts[$caseNo][$key] = 0 }
-    $successCounts[$caseNo][$key]++
+foreach ($caseNo in $uniqueCasenos) {
+    $successEvents = $eventsByCaseno[$caseNo] | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'WorkflowPattern') -eq 'SUCCESS' }
+    foreach ($hit in $successEvents) {
+        $subId = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_subid'
+        $category = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_category'
+        $subcategory = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_subcategory'
+        $key = "$subId|$category|$subcategory"
+        if (-not $successCounts.ContainsKey($caseNo)) { $successCounts[$caseNo] = @{} }
+        if (-not $successCounts[$caseNo].ContainsKey($key)) { $successCounts[$caseNo][$key] = 0 }
+        $successCounts[$caseNo][$key]++
+    }
 }
 
 $results = @()
 foreach ($caseNo in ($errorsByCaseno.Keys | Sort-Object)) {
     $caseErrors = $errorsByCaseno[$caseNo] | Sort-Object { [datetime](Get-ElasticSourceValue -Source $_._source -FieldPath '@timestamp') }
+    $caseEvents = $eventsByCaseno[$caseNo] | Sort-Object { [datetime](Get-ElasticSourceValue -Source $_._source -FieldPath '@timestamp') }
 
     $errorDetails = foreach ($hit in $caseErrors) {
         $timestamp = Get-ElasticSourceValue -Source $hit._source -FieldPath '@timestamp'
@@ -283,11 +275,19 @@ foreach ($caseNo in ($errorsByCaseno.Keys | Sort-Object)) {
         $successSummary = [string]::Join('; ', $fragments)
     }
 
+    $firstCaseTimestamp = Get-ElasticSourceValue -Source ($caseEvents | Select-Object -First 1)._source -FieldPath '@timestamp'
+    $lastCaseTimestamp = Get-ElasticSourceValue -Source ($caseEvents | Select-Object -Last 1)._source -FieldPath '@timestamp'
+
+    $formattedFirstRange = ([datetime]::Parse($firstCaseTimestamp)).ToString('yyyy-MM-dd HH:mm:ss')
+    $formattedLastRange = ([datetime]::Parse($lastCaseTimestamp)).ToString('yyyy-MM-dd HH:mm:ss')
+    $formattedFirstError = ([datetime]::Parse($timestamp)).ToString('yyyy-MM-dd HH:mm:ss')
+    $formattedLastError = ([datetime]::Parse($lastTimestamp)).ToString('yyyy-MM-dd HH:mm:ss')
+
     $results += [pscustomobject]@{
         CaseNo = $caseNo
         ErrorCount = $caseErrors.Count
-        FirstErrorTimestamp = $timestamp
-        LastErrorTimestamp = $lastTimestamp
+        FirstErrorTimestamp = $formattedFirstError
+        LastErrorTimestamp = $formattedLastError
         FirstErrorBusinessCaseId = $businessCaseId
         FirstErrorStatusText = $statusText
         ZugangVonKostenstelle = $zugang
@@ -295,12 +295,13 @@ foreach ($caseNo in ($errorsByCaseno.Keys | Sort-Object)) {
         Successes = $successSummary
     }
 
-    $rangeText = "${timestamp} - ${lastTimestamp}"
+    $rangeText = "${formattedFirstRange} - ${formattedLastRange}"
     Write-Host "Case $caseNo (${rangeText})" -ForegroundColor Cyan
     Write-Host "  Successes: $successSummary" -ForegroundColor Green
     Write-Host "  Errors ($($caseErrors.Count)):" -ForegroundColor Yellow
     foreach ($detail in $errorDetails) {
-        $detailLine = "    $($detail.Timestamp) MSGID=$($detail.BusinessCaseId) ZugangVonKostenstelle='$($detail.ZugangVonKostenstelle)'"
+        $detailTimestamp = ([datetime]::Parse($detail.Timestamp)).ToString('yyyy-MM-dd HH:mm:ss')
+        $detailLine = "    ${detailTimestamp} MSGID=$($detail.BusinessCaseId) ZugangVonKostenstelle='$($detail.ZugangVonKostenstelle)'"
         Write-Host $detailLine
         $detailLine = "    Status='$($detail.StatusText.trim())'"
         Write-Host $detailLine
