@@ -230,7 +230,7 @@ foreach ($caseNo in ($errorsByCaseno.Keys | Sort-Object)) {
             $subId = $parts[0]
             $cat = if ($parts.Count -gt 1) { $parts[1] } else { '' }
             $subcat = if ($parts.Count -gt 2) { $parts[2] } else { '' }
-            "$subId/$cat/$subcat: $($entry.Value)"
+            "$subId/$cat/$($subcat): $($entry.Value)"
         }
         $successSummary = [string]::Join('; ', $fragments)
     }
