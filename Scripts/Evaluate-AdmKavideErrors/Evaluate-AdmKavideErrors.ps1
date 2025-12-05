@@ -246,7 +246,7 @@ foreach ($caseNo in $caseNumbers) {
     try {
         $caseHits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $caseBody -TimeoutSec 120
     } catch {
-        Write-Error "Failed to retrieve details for case $caseNo: $($_.Exception.Message)"
+        Write-Error "Failed to retrieve details for case $($caseNo): $($_.Exception.Message)"
         continue
     }
 
@@ -267,7 +267,7 @@ foreach ($caseNo in $caseNumbers) {
     $successCounts = @{}
     foreach ($hit in $caseHits) {
         $workflowPattern = Get-ElasticSourceValue -Source $hit._source -FieldPath 'WorkflowPattern'
-        if ($workflowPattern -ne 'SUCCESS') { continue }
+        if ($workflowPattern -ne 'OUT') { continue }
 
         $subId = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_subid'
         $category = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_category'
@@ -277,7 +277,9 @@ foreach ($caseNo in $caseNumbers) {
         $successCounts[$key]++
     }
 
-    $caseErrors = $caseErrors | Sort-Object { [datetime](Get-ElasticSourceValue -Source $_._source -FieldPath '@timestamp') }
+    if ($caseErrors.Count -gt 1) {
+        $caseErrors = $caseErrors | Sort-Object { [datetime](Get-ElasticSourceValue -Source $_._source -FieldPath '@timestamp') }
+    }
     $caseEvents = $caseHits | Sort-Object { [datetime](Get-ElasticSourceValue -Source $_._source -FieldPath '@timestamp') }
 
     $errorDetails = foreach ($hit in $caseErrors) {
@@ -309,9 +311,14 @@ foreach ($caseNo in $caseNumbers) {
             $subId = $parts[0]
             $cat = if ($parts.Count -gt 1) { $parts[1] } else { '' }
             $subcat = if ($parts.Count -gt 2) { $parts[2] } else { '' }
-            "$subId/$cat/$($subcat): $($entry.Value)"
+            if ($subcat) { 
+                "$cat $($subcat) ($subId): $($entry.Value)"
+            }
+            else {
+               "$cat ($subId): $($entry.Value)"
+            }
         }
-        $successSummary = [string]::Join('; ', $fragments)
+        $successSummary = [string]::Join('   ', $fragments)
     }
 
     $firstCaseTimestamp = Get-ElasticSourceValue -Source ($caseEvents | Select-Object -First 1)._source -FieldPath '@timestamp'
@@ -340,11 +347,12 @@ foreach ($caseNo in $caseNumbers) {
     Write-Host "  Errors ($($caseErrors.Count)):" -ForegroundColor Yellow
     foreach ($detail in $errorDetails) {
         $detailTimestamp = ([datetime]::Parse($detail.Timestamp)).ToString('yyyy-MM-dd HH:mm:ss')
-        $detailLine = "    ${detailTimestamp} MSGID=$($detail.BusinessCaseId) ZugangVonKostenstelle='$($detail.ZugangVonKostenstelle)'"
+        $detailLine = "    ${detailTimestamp}  $($detail.BusinessCaseId)  ZugangVonKostenstelle: $($detail.ZugangVonKostenstelle)"
         Write-Host $detailLine
         $detailLine = "    Status='$($detail.StatusText.trim())'"
         Write-Host $detailLine
     }
+    Write-Host ""
 }
 
 Write-Progress -Activity 'Processing cases' -Completed -Id 2
