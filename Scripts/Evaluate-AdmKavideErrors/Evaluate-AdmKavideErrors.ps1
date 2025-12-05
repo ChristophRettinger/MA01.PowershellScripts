@@ -300,8 +300,10 @@ foreach ($caseNo in ($errorsByCaseno.Keys | Sort-Object)) {
     Write-Host "  Successes: $successSummary" -ForegroundColor Green
     Write-Host "  Errors ($($caseErrors.Count)):" -ForegroundColor Yellow
     foreach ($detail in $errorDetails) {
-        $detailLine = "    [$($detail.Timestamp)] BCID=$($detail.BusinessCaseId) Status='$($detail.StatusText)' Zugang='$($detail.ZugangVonKostenstelle)'"
-        Write-Host $detailLine -ForegroundColor Red
+        $detailLine = "    $($detail.Timestamp) MSGID=$($detail.BusinessCaseId) ZugangVonKostenstelle='$($detail.ZugangVonKostenstelle)'"
+        Write-Host $detailLine
+        $detailLine = "    Status='$($detail.StatusText.trim())'"
+        Write-Host $detailLine
     }
 }
 
