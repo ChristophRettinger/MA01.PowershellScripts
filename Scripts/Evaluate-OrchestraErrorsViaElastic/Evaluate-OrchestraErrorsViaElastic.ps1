@@ -351,8 +351,7 @@ $scenarioFilter = @{
 
 $filters = @(
     $scenarioFilter,
-    @{ term = @{ 'Environment' = $Environment } },
-    @{ term = @{ 'WorkflowPattern' = 'ERROR' } }
+    @{ term = @{ 'Environment' = $Environment } }
 )
 if ($Instance) { $filters += @{ term = @{ 'Instance' = $Instance } } }
 
@@ -382,12 +381,40 @@ try {
 }
 
 if ($rawHits.Count -eq 0) {
-    Write-Warning 'No errors found for specified criteria.'
+    Write-Warning 'No results found for specified criteria.'
+    return
+}
+
+$timestamps = @()
+foreach ($hit in $rawHits) {
+    $ts = Get-ElasticSourceValue -Source $hit._source -FieldPath '@timestamp'
+    if ($ts) { $timestamps += $ts }
+}
+
+if ($timestamps.Count -gt 0) {
+    $parsedTimestamps = @()
+    foreach ($ts in $timestamps) {
+        try {
+            $parsedTimestamps += [datetimeoffset]$ts
+        } catch {}
+    }
+
+    if ($parsedTimestamps.Count -gt 0) {
+        $minTs = ($parsedTimestamps | Sort-Object)[0].ToLocalTime()
+        $maxTs = ($parsedTimestamps | Sort-Object)[-1].ToLocalTime()
+        Write-Host ("Message time range: {0} - {1}" -f $minTs.ToString('yyyy-MM-dd HH:mm:ss'), $maxTs.ToString('yyyy-MM-dd HH:mm:ss'))
+    }
+}
+
+$errorHits = $rawHits | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'WorkflowPattern') -eq 'ERROR' }
+
+if ($errorHits.Count -eq 0) {
+    Write-Warning 'No error messages found in the retrieved results.'
     return
 }
 
 # Extract error text, apply replacements, and build normalized items
-$items = foreach ($r in $rawHits) {
+$items = foreach ($r in $errorHits) {
     $src = $r._source
     $err = Get-ElasticSourceValue -Source $src -FieldPath 'BK._STATUS_TEXT'
     if ([string]::IsNullOrWhiteSpace($err)) {
