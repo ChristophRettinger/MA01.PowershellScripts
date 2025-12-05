@@ -14,8 +14,13 @@
     is evaluated for each error. The script also gathers workflow successes for
     the same case numbers and summarizes the number of successes grouped by
     BK.SUBFL_subid, BK.SUBFL_category, and BK.SUBFL_subcategory. Results are
-    written to the console and exported to a CSV file in the specified
-    OutputDirectory.
+    written to the console with colored sections showing the case number and the
+    timestamp range (first to last error), followed by successes and individual
+    error details, and exported to a CSV file in the specified OutputDirectory.
+
+    An optional ignore list can be supplied via a text file containing one phrase
+    per line. Any error whose text contains an ignore phrase is skipped and will
+    not be reported or considered for success lookups.
 
 .PARAMETER StartDate
     Inclusive start date for @timestamp filtering (local time). Defaults to the
@@ -46,6 +51,10 @@
     Directory where the CSV summary is written. Defaults to a folder named
     Output beside this script.
 
+.PARAMETER IgnoreListPath
+    Path to a text file containing phrases (one per line) that, when found in the
+    error text, cause the entry to be ignored.
+
 .EXAMPLE
     ./Evaluate-AdmKavideErrors.ps1 -StartDate (Get-Date).AddDays(-1) `
         -Environment production -ElasticApiKeyPath ~/.eskey
@@ -67,14 +76,17 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
 
-    [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKey,
+[Parameter(Mandatory=$false)]
+[string]$ElasticApiKey,
 
-    [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath,
+[Parameter(Mandatory=$false)]
+[string]$ElasticApiKeyPath,
 
-    [Parameter(Mandatory=$false)]
-    [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output')
+[Parameter(Mandatory=$false)]
+[string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output'),
+
+[Parameter(Mandatory=$false)]
+[string]$IgnoreListPath = (Join-Path -Path $PSScriptRoot -ChildPath 'AdmKavideErrors.ignorelist.txt')
 )
 
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
@@ -100,6 +112,38 @@ if ($ElasticApiKey) {
     $k = Get-Content -Path $ElasticApiKeyPath -Raw
     $headers['Authorization'] = "ApiKey $k"
 }
+
+function Get-IgnorePhrases {
+    param(
+        [string]$Path
+    )
+
+    $phrases = @()
+    if (-not [string]::IsNullOrWhiteSpace($Path) -and (Test-Path -Path $Path)) {
+        $phrases = Get-Content -Path $Path | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    }
+
+    return $phrases
+}
+
+function Test-IgnoredErrorText {
+    param(
+        [string]$ErrorText,
+        [string[]]$IgnorePhrases
+    )
+
+    if (-not $IgnorePhrases -or [string]::IsNullOrWhiteSpace($ErrorText)) { return $false }
+
+    foreach ($phrase in $IgnorePhrases) {
+        if (-not [string]::IsNullOrWhiteSpace($phrase) -and ($ErrorText.IndexOf($phrase, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+$ignorePhrases = Get-IgnorePhrases -Path $IgnoreListPath
 
 function Get-ZugangVonKostenstelle {
     param(
@@ -156,6 +200,8 @@ $errorsByCaseno = @{}
 foreach ($hit in $errorHits) {
     $caseNo = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK._CASENO'
     if ([string]::IsNullOrWhiteSpace($caseNo)) { continue }
+    $statusText = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK._STATUS_TEXT'
+    if (Test-IgnoredErrorText -ErrorText $statusText -IgnorePhrases $ignorePhrases) { continue }
     if (-not $errorsByCaseno.ContainsKey($caseNo)) { $errorsByCaseno[$caseNo] = @() }
     $errorsByCaseno[$caseNo] += $hit
 }
@@ -163,7 +209,7 @@ foreach ($hit in $errorHits) {
 $uniqueCasenos = $errorsByCaseno.Keys
 
 $successFilters = @(
-    @{ term = @{ 'ScenarioName.keyword' = 'ITI_SUBFL_KAVIDE_speichern_v01_3287' } },
+    @{ term = @{ 'ScenarioName' = 'ITI_SUBFL_KAVIDE_speichern_v01_3287' } },
     @{ term = @{ 'Environment' = $Environment } },
     @{ term = @{ 'WorkflowPattern' = 'SUCCESS' } },
     @{ terms = @{ 'BK._CASENO.keyword' = $uniqueCasenos } }
@@ -218,7 +264,9 @@ foreach ($caseNo in ($errorsByCaseno.Keys | Sort-Object)) {
     }
 
     $firstError = $errorDetails | Select-Object -First 1
+    $lastError = $errorDetails | Select-Object -Last 1
     $timestamp = $firstError.Timestamp
+    $lastTimestamp = $lastError.Timestamp
     $businessCaseId = $firstError.BusinessCaseId
     $statusText = $firstError.StatusText
     $zugang = $firstError.ZugangVonKostenstelle
@@ -239,15 +287,23 @@ foreach ($caseNo in ($errorsByCaseno.Keys | Sort-Object)) {
         CaseNo = $caseNo
         ErrorCount = $caseErrors.Count
         FirstErrorTimestamp = $timestamp
+        LastErrorTimestamp = $lastTimestamp
         FirstErrorBusinessCaseId = $businessCaseId
         FirstErrorStatusText = $statusText
         ZugangVonKostenstelle = $zugang
         ErrorDetails = ($errorDetails | ConvertTo-Json -Depth 6 -Compress)
         Successes = $successSummary
     }
-}
 
-$results | Format-Table -AutoSize
+    $rangeText = "${timestamp} - ${lastTimestamp}"
+    Write-Host "Case $caseNo (${rangeText})" -ForegroundColor Cyan
+    Write-Host "  Successes: $successSummary" -ForegroundColor Green
+    Write-Host "  Errors ($($caseErrors.Count)):" -ForegroundColor Yellow
+    foreach ($detail in $errorDetails) {
+        $detailLine = "    [$($detail.Timestamp)] BCID=$($detail.BusinessCaseId) Status='$($detail.StatusText)' Zugang='$($detail.ZugangVonKostenstelle)'"
+        Write-Host $detailLine -ForegroundColor Red
+    }
+}
 
 if (-not (Test-Path -Path $OutputDirectory)) {
     $null = New-Item -Path $OutputDirectory -ItemType Directory -Force
