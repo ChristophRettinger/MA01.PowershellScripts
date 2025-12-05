@@ -8,6 +8,7 @@
 - ❗ Centralize Elasticsearch scroll handling in `Scripts/Common/ElasticSearchHelpers.ps1` using `Invoke-ElasticScrollSearch`. Do **not** duplicate manual paging loops inside individual scripts.
 - ❗ Whenever `ElasticSearchHelpers.ps1` changes, review every script that dot-sources it (currently `Evaluate-OrchestraErrorsViaElastic` and `Process-MissingMedarchiv`) and update them to keep behaviour and parameters aligned. Add new scripts to this list when they start using the helper.
 - When filtering for ScenarioName do not use "ScenarioName.keyword", just plain "ScenarioName"
+- Use MSGID as shorthand for BusinessCaseId 
 
 ## PowerShell Variable Interpolation
 
