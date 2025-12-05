@@ -3,21 +3,24 @@
     Evaluate errors for the KAVIDE ITI_SUBFL scenario via Elasticsearch.
 
 .DESCRIPTION
-    Queries Elasticsearch for all workflow entries of scenario
+    Queries Elasticsearch in two phases for the scenario
     ITI_SUBFL_KAVIDE_speichern_v01_3287 within a date range, environment, and
-    optional instance. Unique case numbers (BK._CASENO) are determined from the
-    error hits after retrieval (no error filtering is applied in the query). For
-    each case number the script reports the number of errors, details for the
-    first occurrence (timestamp, BusinessCaseId, BK._STATUS_TEXT error text),
-    and a parsed `ZugangVonKostenstelle` value extracted from MessageData1 (XML).
-    A JSON-serialized list of all error occurrences is included so every error
-    per case number is visible, and `ZugangVonKostenstelle` is evaluated for
-    each error. The script also gathers workflow successes for the same case
-    numbers and summarizes the number of successes grouped by BK.SUBFL_subid,
-    BK.SUBFL_category, and BK.SUBFL_subcategory. Results are written to the
-    console with colored sections showing the case number and the timestamp
-    range (first to last message), followed by successes and individual error
-    details, and exported to a CSV file in the specified OutputDirectory.
+    optional instance. First, errors are collected (WorkflowPattern = ERROR) to
+    identify case numbers (BK._CASENO) that should be analyzed. For each case
+    number, a second Elasticsearch query fetches all matching events for that
+    case to build the summary. The script reports the number of errors, details
+    for the first occurrence (timestamp, BusinessCaseId, BK._STATUS_TEXT error
+    text), and a parsed `ZugangVonKostenstelle` value extracted from
+    MessageData1 (XML). A JSON-serialized list of all error occurrences is
+    included so every error per case number is visible, and
+    `ZugangVonKostenstelle` is evaluated for each error. The script also gathers
+    workflow successes for the same case numbers and summarizes the number of
+    successes grouped by BK.SUBFL_subid, BK.SUBFL_category, and
+    BK.SUBFL_subcategory. Progress bars track the Elasticsearch fetch of error
+    cases and the per-case detail queries. Results are written to the console
+    with colored sections showing the case number and the timestamp range (first
+    to last message), followed by successes and individual error details, and
+    exported to a CSV file in the specified OutputDirectory.
 
     An optional ignore list can be supplied via a text file containing one phrase
     per line. Any error whose text contains an ignore phrase is skipped and will
@@ -77,17 +80,17 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
 
-[Parameter(Mandatory=$false)]
-[string]$ElasticApiKey,
+    [Parameter(Mandatory=$false)]
+    [string]$ElasticApiKey,
 
-[Parameter(Mandatory=$false)]
-[string]$ElasticApiKeyPath,
+    [Parameter(Mandatory=$false)]
+    [string]$ElasticApiKeyPath,
 
-[Parameter(Mandatory=$false)]
-[string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output'),
+    [Parameter(Mandatory=$false)]
+    [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output'),
 
-[Parameter(Mandatory=$false)]
-[string]$IgnoreListPath = (Join-Path -Path $PSScriptRoot -ChildPath 'AdmKavideErrors.ignorelist.txt')
+    [Parameter(Mandatory=$false)]
+    [string]$IgnoreListPath = (Join-Path -Path $PSScriptRoot -ChildPath 'AdmKavideErrors.ignorelist.txt')
 )
 
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
@@ -178,68 +181,104 @@ $sourceFields = @(
     'BK.SUBFL_category','BK.SUBFL_subcategory','MessageData1'
 )
 
-$body = @{
+$errorFilters = @($filters + @{ term = @{ 'WorkflowPattern' = 'ERROR' } })
+$errorBody = @{
     size = 1000
-    query = @{ bool = @{ filter = $filters } }
-    _source = $sourceFields
-} | ConvertTo-Json -Depth 6
+    query = @{ bool = @{ filter = $errorFilters } }
+    _source = @('@timestamp','BusinessCaseId','BK._STATUS_TEXT','BK._CASENO')
+}
+
+$errorHitsCollected = 0
+$onErrorPage = {
+    param($page, $hits, $total)
+    $script:errorHitsCollected += $hits.Count
+    Write-Progress -Activity 'Collecting error cases' -Status "Page $page ($($script:errorHitsCollected) errors)" -PercentComplete 0 -Id 1
+}
 
 try {
-    $allHits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $body -TimeoutSec 120
+    $errorHits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $errorBody -TimeoutSec 120 -OnPage $onErrorPage
 } catch {
     Write-Error $_.Exception.Message
     return
 }
 
-if ($allHits.Count -eq 0) {
+Write-Progress -Activity 'Collecting error cases' -Completed -Id 1
+
+if (-not $errorHits -or $errorHits.Count -eq 0) {
     Write-Warning 'No errors found for specified criteria.'
     return
 }
 
-$eventsByCaseno = @{}
 $errorsByCaseno = @{}
-$errorsFound = $false
-foreach ($hit in $allHits) {
+foreach ($hit in $errorHits) {
     $caseNo = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK._CASENO'
     if ([string]::IsNullOrWhiteSpace($caseNo)) { continue }
-    if (-not $eventsByCaseno.ContainsKey($caseNo)) { $eventsByCaseno[$caseNo] = @() }
-    $eventsByCaseno[$caseNo] += $hit
-
-    $workflowPattern = Get-ElasticSourceValue -Source $hit._source -FieldPath 'WorkflowPattern'
-    if ($workflowPattern -ne 'ERROR') { continue }
 
     $statusText = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK._STATUS_TEXT'
     if (Test-IgnoredErrorText -ErrorText $statusText -IgnorePhrases $ignorePhrases) { continue }
+
     if (-not $errorsByCaseno.ContainsKey($caseNo)) { $errorsByCaseno[$caseNo] = @() }
     $errorsByCaseno[$caseNo] += $hit
-    $errorsFound = $true
 }
 
-if (-not $errorsFound) {
+if ($errorsByCaseno.Count -eq 0) {
     Write-Warning 'No errors found for specified criteria.'
     return
 }
 
-$uniqueCasenos = $errorsByCaseno.Keys
+$caseNumbers = $errorsByCaseno.Keys | Sort-Object
+$totalCases = $caseNumbers.Count
+$caseIndex = 0
 
-$successCounts = @{}
-foreach ($caseNo in $uniqueCasenos) {
-    $successEvents = $eventsByCaseno[$caseNo] | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'WorkflowPattern') -eq 'SUCCESS' }
-    foreach ($hit in $successEvents) {
+$results = @()
+foreach ($caseNo in $caseNumbers) {
+    $caseIndex++
+    $percentComplete = [int](($caseIndex / $totalCases) * 100)
+    Write-Progress -Activity 'Processing cases' -Status "Case $caseNo ($caseIndex of $totalCases)" -PercentComplete $percentComplete -Id 2
+
+    $caseFilters = @($filters + @{ term = @{ 'BK._CASENO' = $caseNo } })
+    $caseBody = @{
+        size = 1000
+        query = @{ bool = @{ filter = $caseFilters } }
+        _source = $sourceFields
+    }
+
+    try {
+        $caseHits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $caseBody -TimeoutSec 120
+    } catch {
+        Write-Error "Failed to retrieve details for case $caseNo: $($_.Exception.Message)"
+        continue
+    }
+
+    if (-not $caseHits -or $caseHits.Count -eq 0) { continue }
+
+    $caseErrors = @()
+    foreach ($hit in $caseHits) {
+        $workflowPattern = Get-ElasticSourceValue -Source $hit._source -FieldPath 'WorkflowPattern'
+        if ($workflowPattern -ne 'ERROR') { continue }
+
+        $statusText = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK._STATUS_TEXT'
+        if (Test-IgnoredErrorText -ErrorText $statusText -IgnorePhrases $ignorePhrases) { continue }
+        $caseErrors += $hit
+    }
+
+    if (-not $caseErrors -or $caseErrors.Count -eq 0) { continue }
+
+    $successCounts = @{}
+    foreach ($hit in $caseHits) {
+        $workflowPattern = Get-ElasticSourceValue -Source $hit._source -FieldPath 'WorkflowPattern'
+        if ($workflowPattern -ne 'SUCCESS') { continue }
+
         $subId = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_subid'
         $category = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_category'
         $subcategory = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_subcategory'
         $key = "$subId|$category|$subcategory"
-        if (-not $successCounts.ContainsKey($caseNo)) { $successCounts[$caseNo] = @{} }
-        if (-not $successCounts[$caseNo].ContainsKey($key)) { $successCounts[$caseNo][$key] = 0 }
-        $successCounts[$caseNo][$key]++
+        if (-not $successCounts.ContainsKey($key)) { $successCounts[$key] = 0 }
+        $successCounts[$key]++
     }
-}
 
-$results = @()
-foreach ($caseNo in ($errorsByCaseno.Keys | Sort-Object)) {
-    $caseErrors = $errorsByCaseno[$caseNo] | Sort-Object { [datetime](Get-ElasticSourceValue -Source $_._source -FieldPath '@timestamp') }
-    $caseEvents = $eventsByCaseno[$caseNo] | Sort-Object { [datetime](Get-ElasticSourceValue -Source $_._source -FieldPath '@timestamp') }
+    $caseErrors = $caseErrors | Sort-Object { [datetime](Get-ElasticSourceValue -Source $_._source -FieldPath '@timestamp') }
+    $caseEvents = $caseHits | Sort-Object { [datetime](Get-ElasticSourceValue -Source $_._source -FieldPath '@timestamp') }
 
     $errorDetails = foreach ($hit in $caseErrors) {
         $timestamp = Get-ElasticSourceValue -Source $hit._source -FieldPath '@timestamp'
@@ -264,8 +303,8 @@ foreach ($caseNo in ($errorsByCaseno.Keys | Sort-Object)) {
     $zugang = $firstError.ZugangVonKostenstelle
 
     $successSummary = '0'
-    if ($successCounts.ContainsKey($caseNo)) {
-        $fragments = foreach ($entry in ($successCounts[$caseNo].GetEnumerator() | Sort-Object Name)) {
+    if ($successCounts.Count -gt 0) {
+        $fragments = foreach ($entry in ($successCounts.GetEnumerator() | Sort-Object Name)) {
             $parts = $entry.Key -split '\|',3
             $subId = $parts[0]
             $cat = if ($parts.Count -gt 1) { $parts[1] } else { '' }
@@ -307,6 +346,8 @@ foreach ($caseNo in ($errorsByCaseno.Keys | Sort-Object)) {
         Write-Host $detailLine
     }
 }
+
+Write-Progress -Activity 'Processing cases' -Completed -Id 2
 
 if (-not (Test-Path -Path $OutputDirectory)) {
     $null = New-Item -Path $OutputDirectory -ItemType Directory -Force
