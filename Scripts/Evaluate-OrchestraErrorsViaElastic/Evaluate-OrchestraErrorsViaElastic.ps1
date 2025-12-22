@@ -50,7 +50,7 @@
     Elasticsearch API key string. If omitted, ElasticApiKeyPath is used.
 
 .PARAMETER ElasticApiKeyPath
-    Path to a file containing the Elasticsearch API key.
+    Path to a file containing the Elasticsearch API key. Defaults to '.\elastic.key'.
 
 .PARAMETER OutputDirectory
     Directory where result files are written for modes All or OneOfType. Defaults to
@@ -104,7 +104,7 @@ param(
     [string]$ElasticApiKey,
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath,
+    [string]$ElasticApiKeyPath = '.\elastic.key',
 
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output'),
