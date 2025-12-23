@@ -162,7 +162,17 @@ function Convert-ToTimestamp {
     if ([string]::IsNullOrWhiteSpace($value)) { return $null }
 
     $parsed = $null
-    if ([datetime]::TryParse($value, [ref]$parsed)) { return $parsed }
+    if ($value -is [System.DateTimeOffset]) { return $value.UtcDateTime }
+
+    $stringValue = $value.ToString()
+    if ([datetime]::TryParse(
+        $stringValue,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::AssumeUniversal,
+        [ref]$parsed
+    )) {
+        return $parsed
+    }
     return $null
 }
 
