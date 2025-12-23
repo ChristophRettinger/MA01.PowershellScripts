@@ -76,7 +76,7 @@ param(
     [string]$ElasticTimeField = '@timestamp',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-subscriptionflow.journals*/_search',
+    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
 
     [Parameter(Mandatory=$false)]
     [string]$ElasticApiKey,
@@ -96,7 +96,7 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$MOVENO
 )
-Write-Host $ElasticApiKeyPath
+
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
 $sharedHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ElasticSearchHelpers.ps1'
 if (-not (Test-Path -Path $sharedHelpersPath)) {
