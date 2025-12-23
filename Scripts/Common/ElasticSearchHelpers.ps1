@@ -142,7 +142,7 @@ function Invoke-ElasticScrollSearch {
     }
 
     if ($Body -isnot [string]) {
-        $Body = $Body | ConvertTo-Json -Depth 10
+        $Body = $Body | ConvertTo-Json -Depth 100 -Compress
     }
 
     $searchUri = if ($ElasticUrl -match '\?') {

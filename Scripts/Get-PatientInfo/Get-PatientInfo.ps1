@@ -45,7 +45,7 @@
     Directory where a JSON export of the collected hits is written. Defaults to an
     `Output` folder beside this script.
 
-.PARAMETER PID
+.PARAMETER PIDISH
     Patient identifier (BK._PID_ISH). When provided, all related cases and transfers
     for the patient are retrieved.
 
@@ -59,7 +59,7 @@
     Optional movement identifier (BK._MOVENO) to further narrow case results.
 
 .EXAMPLE
-    ./Get-PatientInfo.ps1 -PID 0000869517 -StartDate '2025-05-01' -EndDate '2025-05-07'
+    ./Get-PatientInfo.ps1 -PIDISH 0000869517 -StartDate '2025-05-01' -EndDate '2025-05-07'
 
 .EXAMPLE
     ./Get-PatientInfo.ps1 -CASENO 7622000264 -MOVENO 00042 -ElasticApiKeyPath ~/.eskey
@@ -82,13 +82,13 @@ param(
     [string]$ElasticApiKey,
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath = '.\elastic.key',
+    [string]$ElasticApiKeyPath = (Join-Path -Path $PSScriptRoot -ChildPath 'elastic.key'),
 
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output'),
 
     [Parameter(Mandatory=$false)]
-    [string]$PID,
+    [string]$PIDISH,
 
     [Parameter(Mandatory=$false)]
     [string]$CASENO,
@@ -96,7 +96,7 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$MOVENO
 )
-
+Write-Host $ElasticApiKeyPath
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
 $sharedHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ElasticSearchHelpers.ps1'
 if (-not (Test-Path -Path $sharedHelpersPath)) {
@@ -104,12 +104,12 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
 }
 . $sharedHelpersPath
 
-if (-not $PID -and -not $CASENO) {
-    Write-Error 'Provide either PID or CASENO to search for patient information.'
+if (-not $PIDISH -and -not $CASENO) {
+    Write-Error 'Provide either PIDISH or CASENO to search for patient information.'
     return
 }
 
-if ($PID) { $PID = $PID.Trim() }
+if ($PIDISH) { $PIDISH = $PIDISH.Trim() }
 if ($CASENO) { $CASENO = $CASENO.Trim() }
 if ($MOVENO) { $MOVENO = $MOVENO.Trim() }
 
@@ -195,9 +195,9 @@ function New-IdentityClause {
     $shouldClauses = @()
 
     if ($PidFilters -and $PidFilters.Count -gt 0) {
-        foreach ($pid in $PidFilters) {
-            if ([string]::IsNullOrWhiteSpace($pid)) { continue }
-            $shouldClauses += @{ term = @{ 'BK._PID_ISH' = $pid } }
+        foreach ($pidish in $PidFilters) {
+            if ([string]::IsNullOrWhiteSpace($pidish)) { continue }
+            $shouldClauses += @{ term = @{ 'BK._PID_ISH' = $pidish } }
         }
     }
 
@@ -210,7 +210,7 @@ function New-IdentityClause {
     }
 
     if (-not $shouldClauses -or $shouldClauses.Count -eq 0) {
-        throw 'No PID or case clause available for the search query.'
+        throw 'No PIDISH or case clause available for the search query.'
     }
 
     return @{ bool = @{ should = $shouldClauses; minimum_should_match = 1 } }
@@ -224,7 +224,7 @@ if ($CASENO -and -not $caseField) {
 $headers = @{ 'Content-Type' = 'application/json' }
 if ($PSBoundParameters.ContainsKey('ElasticApiKey') -and $ElasticApiKey) {
     $headers['Authorization'] = "ApiKey $ElasticApiKey"
-} elseif ($PSBoundParameters.ContainsKey('ElasticApiKeyPath') -and $ElasticApiKeyPath) {
+} elseif ($ElasticApiKeyPath) {
     if (Test-Path -Path $ElasticApiKeyPath) {
         $key = Get-Content -Path $ElasticApiKeyPath -Raw
         if (-not [string]::IsNullOrWhiteSpace($key)) {
@@ -267,7 +267,7 @@ function Invoke-PatientQuery {
     )
 
     $mustClauses = @($baseMust)
-
+    
     $identityClause = $null
     try {
         $identityClause = New-IdentityClause -PidFilters $PidFilters -CaseField $caseField -CaseValue $CASENO -IncludeCase $IncludeCase
@@ -277,11 +277,11 @@ function Invoke-PatientQuery {
     }
 
     $mustClauses += $identityClause
-
+    
     $body = @{
         size = 500
         sort = @(@{ $ElasticTimeField = @{ order = 'asc' } })
-        query = @{ bool = @{ must = $mustClauses; must_not = $mustNot } }
+        query = @{ bool = @{ must = $mustClauses; must_not = $mustNot } }        
     }
 
     $hits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $body -TimeoutSec 120
@@ -300,24 +300,24 @@ function Add-Hits {
 }
 
 $initialPidFilters = @()
-if ($PID) { $initialPidFilters += $PID.Trim() }
+if ($PIDISH) { $initialPidFilters += $PIDISH.Trim() }
 
 $initialHits = Invoke-PatientQuery -PidFilters $initialPidFilters -IncludeCase $true
 Add-Hits -Hits $initialHits
 
 $queuedPids = [System.Collections.Queue]::new()
 $searchedPids = [System.Collections.Generic.HashSet[string]]::new()
-foreach ($pid in $initialPidFilters) { if ($pid) { $null = $searchedPids.Add($pid) } }
+foreach ($pidish in $initialPidFilters) { if ($pidish) { $null = $searchedPids.Add($pidish) } }
 
 $discovered = Get-PidValuesFromHits -Hits $initialHits
-foreach ($pid in $discovered) {
-    if (-not $searchedPids.Contains($pid)) {
-        $queuedPids.Enqueue($pid)
-        $null = $searchedPids.Add($pid)
+foreach ($pidish in $discovered) {
+    if (-not $searchedPids.Contains($pidish)) {
+        $queuedPids.Enqueue($pidish)
+        $null = $searchedPids.Add($pidish)
     }
 }
 
-if (-not $PID -and $queuedPids.Count -eq 0 -and $CASENO) {
+if (-not $PIDISH -and $queuedPids.Count -eq 0 -and $CASENO) {
     Write-Warning 'No PID discovered from case search; results may only include case-bound records.'
 }
 
@@ -329,10 +329,10 @@ while ($queuedPids.Count -gt 0) {
     Add-Hits -Hits $nextHits
 
     $newPids = Get-PidValuesFromHits -Hits $nextHits
-    foreach ($pid in $newPids) {
-        if (-not $searchedPids.Contains($pid)) {
-            $queuedPids.Enqueue($pid)
-            $null = $searchedPids.Add($pid)
+    foreach ($pidish in $newPids) {
+        if (-not $searchedPids.Contains($pidish)) {
+            $queuedPids.Enqueue($pidish)
+            $null = $searchedPids.Add($pidish)
         }
     }
 }
@@ -351,7 +351,7 @@ try {
     $collectedHits.Values | ConvertTo-Json -Depth 15 | Set-Content -Path $exportPath
     Write-Host "Exported raw hits to $exportPath"
 } catch {
-    Write-Warning "Failed to write export to $OutputDirectory: $_"
+    Write-Warning "Failed to write export to $($OutputDirectory): $_"
 }
 
 $orderedHits = $collectedHits.Values | Sort-Object { Convert-ToTimestamp -Source $_._source -TimeField $ElasticTimeField }
@@ -373,7 +373,7 @@ foreach ($hit in $orderedHits) {
     $moveNo = Get-ElasticSourceValue -Source $src -FieldPath 'BK._MOVENO'
     $businessCase = Get-ElasticSourceValue -Source $src -FieldPath 'BusinessCaseId'
     if (-not $businessCase) { $businessCase = Get-ElasticSourceValue -Source $src -FieldPath 'MSGID' }
-    $aid = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID'
+    $aid = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH'
     $key = "${caseIsh}|${moveNo}|${businessCase}|${aid}"
     if (-not $headerMap.ContainsKey($key)) {
         $headerMap[$key] = [PSCustomObject]@{

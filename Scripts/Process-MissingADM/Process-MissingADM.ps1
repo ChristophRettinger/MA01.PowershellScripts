@@ -75,7 +75,7 @@ param(
     [string]$ElasticApiKey,
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath = '.\elastic.key',
+    [string]$ElasticApiKeyPath = (Join-Path -Path $PSScriptRoot -ChildPath 'elastic.key'),
 
     [Parameter(Mandatory=$false)]
     [int]$IncreaseElasticDateRange = 4,
@@ -116,7 +116,7 @@ $apiKey = $null
 if ($PSBoundParameters.ContainsKey('ElasticApiKey') -and $ElasticApiKey) {
     $apiKey = $ElasticApiKey.Trim()
 }
-elseif ($PSBoundParameters.ContainsKey('ElasticApiKeyPath') -and $ElasticApiKeyPath) {
+elseif ($ElasticApiKeyPath) {
     if (-not (Test-Path -Path $ElasticApiKeyPath)) {
         throw "ElasticApiKeyPath '$ElasticApiKeyPath' not found. Provide a valid path or use -ElasticApiKey."
     }
