@@ -141,7 +141,7 @@ function Get-CategoryColor {
         'CASE' { return 'White' }
         'DIAGNOSIS' { return 'Gray' }
         'INSURANCE' { return 'Gray' }
-        'MERGE' { return 'Red' }
+        'MERGE' { return 'Blue' }
         'CLASSIFICATION' { return 'Gray' }
         'SPLIT' { return 'Red' }
         default { return 'Cyan' }
@@ -422,16 +422,13 @@ foreach ($hit in $orderedHits) {
     $src = $hit._source
     $caseIsh = Get-ElasticSourceValue -Source $src -FieldPath 'BK._CASENO_ISH'
     $moveNo = Get-ElasticSourceValue -Source $src -FieldPath 'BK._MOVENO'
-    $businessCase = Get-ElasticSourceValue -Source $src -FieldPath 'BusinessCaseId'
-    if (-not $businessCase) { $businessCase = Get-ElasticSourceValue -Source $src -FieldPath 'MSGID' }
-    $aid = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH'
-    $key = "${caseIsh}|${moveNo}|${aid}"
+    $pidish = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH'
+    $key = "${caseIsh}|${moveNo}|${pidish}"
     if (-not $headerMap.ContainsKey($key)) {
         $headerMap[$key] = @{
             CASENO_ISH = if ($caseIsh) { $caseIsh } else { '-' }
             MOVENO = if ($moveNo) { $moveNo } else { '-' }
-            BusinessCases = [System.Collections.Generic.HashSet[string]]::new()
-            AID = if ($aid) { $aid } else { '-' }
+            PIDISH = if ($pidish) { $pidish } else { '-' }
         }
     }
 
@@ -441,24 +438,16 @@ foreach ($hit in $orderedHits) {
 }
 
 if ($headerMap.Values.Count -gt 0) {
-    Write-Host 'Cases and movements:' -ForegroundColor Cyan
-    $headerRows = foreach ($entry in $headerMap.Values) {
-        $businessCaseValues = $entry.BusinessCases
-        $businessCaseDisplay = if ($businessCaseValues -and $businessCaseValues.Count -gt 0) {
-            ($businessCaseValues.ToArray() | Sort-Object | -join ', ')
-        } else {
-            '-'
-        }
-
+    Write-Host 'Cases:' -ForegroundColor Cyan
+    $headerRows = foreach ($entry in $headerMap.Values) {        
         [PSCustomObject]@{
             CASENO_ISH = $entry.CASENO_ISH
             MOVENO = $entry.MOVENO
-            BC = $businessCaseDisplay
-            AID = $entry.AID
+            PIDISH = $entry.PIDISH
         }
     }
 
-    $headerRows | Sort-Object CASENO_ISH, MOVENO | Format-Table -AutoSize
+    $headerRows | Where-Object { $_.CASENO_ISH -ne "-" } | Sort-Object CASENO_ISH, MOVENO | Format-Table -AutoSize
 }
 
 $segments = @{
@@ -474,28 +463,30 @@ foreach ($segmentKey in @('ERROR','OTHER')) {
     }
 
     $segmentTitle = if ($segmentKey -eq 'ERROR') { 'WorkflowPattern = ERROR' } else { 'WorkflowPattern <> ERROR' }
-    Write-Host "\n$segmentTitle" -ForegroundColor Magenta
+    #Write-Host "\n$segmentTitle" -ForegroundColor Magenta
 
     $grouped = $segmentHits | Group-Object -Property {
         $src = $_._source
         $caseIsh = Get-ElasticSourceValue -Source $src -FieldPath 'BK._CASENO_ISH'
+        $pidIsh = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH'
         $category = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_category'
         $subcat = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_subcategory'
         $change = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_changeart'
         $pattern = Get-ElasticSourceValue -Source $src -FieldPath 'WorkflowPattern'
-        return "$($caseIsh)|$($category)|$($subcat)|$($change)|$($pattern)"
+        return "$($caseIsh)|$($pidIsh)|$($category)|$($subcat)|$($change)|$($pattern)"
     }
 
     foreach ($group in $grouped) {
         $parts = $group.Name -split '\|'
         $caseIsh = if ($parts.Count -gt 0 -and $parts[0]) { $parts[0] } else { '-' }
-        $category = if ($parts.Count -gt 1 -and $parts[1]) { $parts[1] } else { '-' }
-        $subcategory = if ($parts.Count -gt 2 -and $parts[2]) { $parts[2] } else { '-' }
-        $changeType = if ($parts.Count -gt 3 -and $parts[3]) { $parts[3] } else { '-' }
-        $pattern = if ($parts.Count -gt 4 -and $parts[4]) { $parts[4] } else { '-' }
+        $pidIsh = if ($parts.Count -gt 1 -and $parts[1]) { $parts[1] } else { '-' }
+        $category = if ($parts.Count -gt 2 -and $parts[2]) { $parts[2] } else { '-' }
+        $subcategory = if ($parts.Count -gt 3 -and $parts[3]) { $parts[3] } else { '-' }
+        $changeType = if ($parts.Count -gt 4 -and $parts[4]) { $parts[4] } else { '-' }
+        $pattern = if ($parts.Count -gt 5 -and $parts[5]) { $parts[5] } else { '-' }
 
         $color = Get-CategoryColor -Category $category
-        Write-Host "Case $($caseIsh) | Category $($category) / $($subcategory) | Change $($changeType) | Pattern $($pattern)" -ForegroundColor $color
+        Write-Host "Case $($caseIsh) | PID  $($pidIsh) | Category $($category) / $($subcategory) | Change $($changeType) | Pattern $($pattern)" -ForegroundColor $color
 
         $inputs = $group.Group | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_stage') -eq 'Input' }
         if ($inputs -and $inputs.Count -gt 0) {
