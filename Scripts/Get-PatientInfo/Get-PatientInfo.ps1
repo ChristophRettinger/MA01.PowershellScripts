@@ -11,7 +11,9 @@
     `BK._CASENO_ISH`, `BK.SUBFL_category`, `BK.SUBFL_subcategory`,
     `BK.SUBFL_changeart`, and `WorkflowPattern`. For each group the script lists the
     Input stage range and counts plus Output stage ranges grouped by receiver
-    (`BK.SUBFL_party`).
+    (`BK.SUBFL_party`). The case/movement header is deduped by case and movement
+    (not BusinessCaseId) while still showing any BusinessCaseId or MSGID values
+    discovered.
 
     When a `BK._PID_ISH_OLD` value is discovered in any hit, the script automatically
     re-runs the search for that PID in `BK._PID_ISH` and merges the data. If only a
@@ -423,20 +425,40 @@ foreach ($hit in $orderedHits) {
     $businessCase = Get-ElasticSourceValue -Source $src -FieldPath 'BusinessCaseId'
     if (-not $businessCase) { $businessCase = Get-ElasticSourceValue -Source $src -FieldPath 'MSGID' }
     $aid = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH'
-    $key = "${caseIsh}|${moveNo}|${businessCase}|${aid}"
+    $key = "${caseIsh}|${moveNo}|${aid}"
     if (-not $headerMap.ContainsKey($key)) {
-        $headerMap[$key] = [PSCustomObject]@{
+        $headerMap[$key] = @{
             CASENO_ISH = if ($caseIsh) { $caseIsh } else { '-' }
             MOVENO = if ($moveNo) { $moveNo } else { '-' }
-            BC = if ($businessCase) { $businessCase } else { '-' }
+            BusinessCases = [System.Collections.Generic.HashSet[string]]::new()
             AID = if ($aid) { $aid } else { '-' }
         }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($businessCase)) {
+        $null = $headerMap[$key].BusinessCases.Add($businessCase)
     }
 }
 
 if ($headerMap.Values.Count -gt 0) {
     Write-Host 'Cases and movements:' -ForegroundColor Cyan
-    $headerMap.Values | Sort-Object CASENO_ISH, MOVENO | Format-Table -AutoSize
+    $headerRows = foreach ($entry in $headerMap.Values) {
+        $businessCaseValues = $entry.BusinessCases
+        $businessCaseDisplay = if ($businessCaseValues -and $businessCaseValues.Count -gt 0) {
+            ($businessCaseValues.ToArray() | Sort-Object | -join ', ')
+        } else {
+            '-'
+        }
+
+        [PSCustomObject]@{
+            CASENO_ISH = $entry.CASENO_ISH
+            MOVENO = $entry.MOVENO
+            BC = $businessCaseDisplay
+            AID = $entry.AID
+        }
+    }
+
+    $headerRows | Sort-Object CASENO_ISH, MOVENO | Format-Table -AutoSize
 }
 
 $segments = @{
