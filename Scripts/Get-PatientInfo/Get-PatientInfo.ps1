@@ -17,7 +17,7 @@
     re-runs the search for that PID in `BK._PID_ISH` and merges the data. If only a
     case number is supplied, the script first queries by case and then repeats the
     search for the associated PID(s) to include patient-level records without case
-    identifiers.
+    identifiers while excluding other cases belonging to the same patient.
 
 .PARAMETER StartDate
     Optional inclusive start date for the time range filter applied to the specified
@@ -230,6 +230,7 @@ $caseField = Get-CaseFieldName -CaseNumber $CASENO
 if ($CASENO -and -not $caseField) {
     Write-Warning 'Case number did not match known patterns. Searching all known identifiers.'
 }
+$caseFilterValue = if ($CASENO) { $CASENO.Trim() } else { $null }
 
 $headers = @{ 'Content-Type' = 'application/json' }
 if ($PSBoundParameters.ContainsKey('ElasticApiKey') -and $ElasticApiKey) {
@@ -299,9 +300,47 @@ function Invoke-PatientQuery {
 }
 
 $collectedHits = @{}
+$caseFieldPaths = @('BK._CASENO_ISH','BK._CASENO_BC','BK._CASENO')
+function Get-CaseValuesFromSource {
+    param([object]$Source)
+
+    $values = @()
+    foreach ($field in $caseFieldPaths) {
+        $value = Get-ElasticSourceValue -Source $Source -FieldPath $field
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            $values += $value
+        }
+    }
+    return $values
+}
+
+function ShouldIncludeCaseResult {
+    param(
+        [object]$Hit,
+        [string]$TargetCase
+    )
+
+    if (-not $TargetCase) { return $true }
+
+    $source = $Hit._source
+    $caseValues = Get-CaseValuesFromSource -Source $source
+    if (-not $caseValues -or $caseValues.Count -eq 0) {
+        return $true
+    }
+
+    foreach ($caseValue in $caseValues) {
+        if ($caseValue -eq $TargetCase) { return $true }
+    }
+
+    return $false
+}
+
 function Add-Hits {
     param([object[]]$Hits)
     foreach ($hit in $Hits) {
+        if (-not (ShouldIncludeCaseResult -Hit $hit -TargetCase $caseFilterValue)) {
+            continue
+        }
         $identifier = $hit._id
         if (-not $collectedHits.ContainsKey($identifier)) {
             $collectedHits[$identifier] = $hit
