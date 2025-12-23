@@ -21,8 +21,20 @@ This note consolidates how Subscription Flow (SUBFL) scenarios log to Elasticsea
 - Processing/output scenarios extend the flow; mapping steps use `BK.SUBFL_stage:Process` and final senders use `BK.SUBFL_stage:Output` plus `BK.SUBFL_outputtype`.
 - Host metadata defaults to `BK.SUBFL_source_host` (see Add-HostNames).
 
-## Script-observed SUBFL elastic usage
-- **Process-MissingADM** queries `BK.SUBFL_sourceid` in Elasticsearch for `BK.SUBFL_messagetype:AdmRecord` and `BK.SUBFL_stage:Input` in the `production` environment, expanding the time range around the DB window. It maps `BK.SUBFL_sourceid` to the ADM `CL_ID` range and uses `@timestamp` (or a caller-specified field) for filtering.【F:Scripts/Process-MissingADM/Process-MissingADM.ps1†L9-L13】【F:Scripts/Process-MissingADM/Process-MissingADM.ps1†L183-L200】
-- **Process-MissingMedarchiv** compares `CL_ID_BIG` values against Elasticsearch by filtering `BK.SUBFL_sourceid` and `BK.SUBFL_sourcedb` (mapped from the database name) within the selected time range, reusing the shared scroll helper.【F:Scripts/Process-MissingMedarchiv/Process-MissingMedarchiv.ps1†L4-L11】【F:Scripts/Process-MissingMedarchiv/Process-MissingMedarchiv.ps1†L235-L266】
-- **Evaluate-AdmKavideErrors** focuses on scenario `ITI_SUBFL_KAVIDE_speichern_v01_3287`, first pulling `WorkflowPattern:ERROR` events to find case numbers (`BK._CASENO`), then querying full events per case. It summarizes successes grouped by `BK.SUBFL_subid`, `BK.SUBFL_category`, and `BK.SUBFL_subcategory`, reporting `BusinessCaseId` (MSGID) and `BK._STATUS_TEXT` details for each error.【F:Scripts/Evaluate-AdmKavideErrors/Evaluate-AdmKavideErrors.ps1†L5-L23】【F:Scripts/Evaluate-AdmKavideErrors/Evaluate-AdmKavideErrors.ps1†L169-L183】
-- **Add-HostNames** defaults to resolving hostnames from the `BK.SUBFL_source_host` field when enriching CSV data.【F:Scripts/Add-HostNames/Add-HostNames.ps1†L13-L34】
+## Known SUBFL Elastic fields
+- **BK._CASENO** (also called **AID**): case number such as `90120311    93013630` with pattern `\d{8}    \d{8}`. Equivalent in meaning to the other CASENO variations.
+- **BK._CASENO_BC** (Barcode MAC): alternative case identifier such as `1JDLRYBKK` with pattern `\w{9}`.
+- **BK._CASENO_ISH** (Fallzahl): case number variant such as `7622000264` with pattern `\d{10}`.
+- **BK._PID**: patient identifier shown as **AID** in script output to highlight the patient reference alongside case identifiers.
+- **BK._PID_ISH** (also called **PID**, shown as **Fallzahl** in script output): patient identifier such as `0000869517` with pattern `\d{10}`.
+- **BK.SUBFL_category**: identifies the category of data (e.g., `CASE`, `PATIENT`, `DIAGNOSIS`).
+- **BK.SUBFL_changeart**: denotes change type (`INSERT`, `UPDATE`, or `DELETE`).
+- **BK.SUBFL_subcategory**: further refines the category (e.g., `Visit`, `Admission`, `Transfer`); only present for some categories.
+- **BK.SUBFL_party**: receiver name that groups subscriptions logically and can be used for filtering.
+- **BK.SUBFL_subid**: subscription identifier.
+- **BK.SUBFL_workflow**: workflow name.
+- **BK.SUBFL_sourceid**: source record identifier, such as a database primary key or HCM MessageID.
+- **BK._ELGA_RELEVANT**: `true` or `false`, indicating whether a record may be sent to the Sense system.
+- **BK._MOVENO**: movement identifier within a case, following the pattern `\d{5}`.
+
+The different CASENO values (`BK._CASENO`, `BK._CASENO_BC`, and `BK._CASENO_ISH`) represent the same underlying case, and most logs include all of them. When producing script output, display `BK._PID` as **AID** and `BK._PID_ISH` as **Fallzahl** to keep patient and case identifiers aligned.
