@@ -161,7 +161,7 @@ function Convert-ToTimestamp {
 
     if ([string]::IsNullOrWhiteSpace($value)) { return $null }
 
-    $parsed = $null
+    $parsed = New-Object DateTime
     if ($value -is [System.DateTimeOffset]) { return $value.UtcDateTime }
 
     $stringValue = $value.ToString()
