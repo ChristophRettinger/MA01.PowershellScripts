@@ -36,5 +36,12 @@ This note consolidates how Subscription Flow (SUBFL) scenarios log to Elasticsea
 - **BK.SUBFL_sourceid**: source record identifier, such as a database primary key or HCM MessageID.
 - **BK._ELGA_RELEVANT**: `true` or `false`, indicating whether a record may be sent to the Sense system.
 - **BK._MOVENO**: movement identifier within a case, following the pattern `\d{5}`.
+- **BK._PID_ISH_OLD**: legacy patient identifier written when a patient merge occurs. Use it to re-query `BK._PID_ISH` so historical records are included alongside the current PID.
+
+## HCM-specific filters used by scripts
+- HCM entries are identified by `BK.SUBFL_messagetype:HCM` and `Environment:production`.
+- Input stage records use `BK.SUBFL_stage:Input`. Output records relevant to Sense and KAVIDE use `BK.SUBFL_stage:Output` with `ScenarioName` values `ITI_SUBFL_Sense_senden_4292` or `ITI_SUBFL_KAVIDE_speichern_v01_3287`.
+- `WorkflowPattern:REQ_RESP` is excluded for standard HCM analysis.
+- Case detection rules: `BK._CASENO_ISH` is 10 digits, `BK._CASENO_BC` is 9 alphanumeric characters, and `BK._CASENO` is two 8-digit numbers separated by whitespace.
 
 The different CASENO values (`BK._CASENO`, `BK._CASENO_BC`, and `BK._CASENO_ISH`) represent the same underlying case, and most logs include all of them. When producing script output, display `BK._PID` as **AID** and `BK._PID_ISH` as **Fallzahl** to keep patient and case identifiers aligned.
