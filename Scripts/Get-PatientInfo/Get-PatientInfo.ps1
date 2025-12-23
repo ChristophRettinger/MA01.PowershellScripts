@@ -459,7 +459,6 @@ foreach ($hit in $orderedHits) {
 }
 
 if ($headerMap.Values.Count -gt 0) {
-    Write-Host 'Cases:' -ForegroundColor Cyan
     $headerRows = foreach ($entry in $headerMap.Values) {        
         [PSCustomObject]@{
             CASENO_ISH = $entry.CASENO_ISH
@@ -470,13 +469,6 @@ if ($headerMap.Values.Count -gt 0) {
 
     $headerRows | Where-Object { $_.CASENO_ISH -ne "-" } | Sort-Object CASENO_ISH, MOVENO | Format-Table -AutoSize
 }
-
-#$segments = @{
-#    'ERROR' = $orderedHits | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'WorkflowPattern') -eq 'ERROR' }
-#    'OTHER' = $orderedHits | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'WorkflowPattern') -ne 'ERROR' }
-#}
-
-#foreach ($segmentKey in @('ERROR','OTHER')) {
 
 $segments = @{}
 $currentWorkflowPattern = ""
@@ -543,7 +535,13 @@ for ($i=1; $i -le $counter; $i++) {
 
         $color = Get-CategoryColor -Category $category
         $changeText = if ($IgnoreChangeArt) { '' } else { " | Change $($changeType)" }
-        Write-Host "`nCase $($caseIsh) | PID  $($pidIsh) $($pidIshOld) | Category $($category) / $($subcategory)$($changeText) | Pattern $($pattern)" -ForegroundColor $color
+        Write-Host "`nCase $($caseIsh) | PID  $($pidIsh)$($pidIshOld) | Category $($category) / $($subcategory) | Change $($changeType)" -ForegroundColor $color -NoNewline
+        if ($pattern -eq "ERROR") {
+            Write-host "  $($pattern)" -ForegroundColor Red
+        }
+        else {
+            Write-Host ""
+        }
 
         $inputs = @($group.Group | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_stage') -eq 'Input' })
         if ($inputs -and $inputs.Count -gt 0) {
@@ -568,3 +566,4 @@ for ($i=1; $i -le $counter; $i++) {
         }
     }
 }
+Write-host ""
