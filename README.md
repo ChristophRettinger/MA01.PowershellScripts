@@ -21,3 +21,7 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 ## Shared utilities
 
 - **Scripts/Common/ElasticSearchHelpers.ps1** - Hosts `Invoke-ElasticScrollSearch`, a reusable helper that issues scroll queries, aggregates all hits, surfaces detailed error information, and optionally reports page progress for callers. Scripts such as Process-MissingMedarchiv and Evaluate-OrchestraErrorsViaElastic dot-source this file to keep Elasticsearch pagination logic consistent.
+
+## Documentation references
+
+- **SubflElasticInfo.md** - Overview of Subscription Flow (SUBFL) terminology plus how SUBFL scenarios log to Elasticsearch, including the specific fields and filters leveraged by the SUBFL-related scripts in this repository.
