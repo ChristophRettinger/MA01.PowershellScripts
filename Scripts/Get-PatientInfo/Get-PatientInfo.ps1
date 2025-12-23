@@ -143,7 +143,7 @@ function Get-CategoryColor {
         'INSURANCE' { return 'Gray' }
         'MERGE' { return 'Blue' }
         'CLASSIFICATION' { return 'Gray' }
-        'SPLIT' { return 'Red' }
+        'SPLIT' { return 'Blue' }
         default { return 'Cyan' }
     }
 }
@@ -431,10 +431,6 @@ foreach ($hit in $orderedHits) {
             PIDISH = if ($pidish) { $pidish } else { '-' }
         }
     }
-
-    if (-not [string]::IsNullOrWhiteSpace($businessCase)) {
-        $null = $headerMap[$key].BusinessCases.Add($businessCase)
-    }
 }
 
 if ($headerMap.Values.Count -gt 0) {
@@ -450,13 +446,39 @@ if ($headerMap.Values.Count -gt 0) {
     $headerRows | Where-Object { $_.CASENO_ISH -ne "-" } | Sort-Object CASENO_ISH, MOVENO | Format-Table -AutoSize
 }
 
-$segments = @{
-    'ERROR' = $orderedHits | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'WorkflowPattern') -eq 'ERROR' }
-    'OTHER' = $orderedHits | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'WorkflowPattern') -ne 'ERROR' }
+#$segments = @{
+#    'ERROR' = $orderedHits | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'WorkflowPattern') -eq 'ERROR' }
+#    'OTHER' = $orderedHits | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'WorkflowPattern') -ne 'ERROR' }
+#}
+
+#foreach ($segmentKey in @('ERROR','OTHER')) {
+
+$segments = @{}
+$currentWorkflowPattern = ""
+$counter = 0
+
+foreach($hit in $orderedHits) {
+    $workflowPattern = Get-ElasticSourceValue -Source $hit._source -FieldPath 'WorkflowPattern'
+
+    if ($currentWorkflowPattern -ne $workflowPattern) {
+        $currentWorkflowPattern = $workflowPattern
+        $counter = $counter + 1
+        if ($workflowPattern -eq "ERROR") {
+            $segments[$counter] = @{ WorkflowPattern = "ERROR"; Hits = @() }
+        }
+        else {
+            $segments[$counter] = @{ WorkflowPattern = "OK"; Hits = @() }
+        }
+    }
+
+    $segments[$counter].Hits += $hit
+
 }
 
-foreach ($segmentKey in @('ERROR','OTHER')) {
-    $segmentHits = $segments[$segmentKey]
+for ($i=1; $i -le $counter; $i++) {
+    $segmentHits = $segments[$i].Hits
+    $segmentKey = $segments[$i].WorkflowPattern
+
     if (-not $segmentHits -or $segmentHits.Count -eq 0) {
         Write-Host "No $segmentKey records." -ForegroundColor DarkGray
         continue
@@ -469,42 +491,45 @@ foreach ($segmentKey in @('ERROR','OTHER')) {
         $src = $_._source
         $caseIsh = Get-ElasticSourceValue -Source $src -FieldPath 'BK._CASENO_ISH'
         $pidIsh = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH'
+        $pidIshOld = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH_OLD'
         $category = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_category'
         $subcat = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_subcategory'
         $change = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_changeart'
         $pattern = Get-ElasticSourceValue -Source $src -FieldPath 'WorkflowPattern'
-        return "$($caseIsh)|$($pidIsh)|$($category)|$($subcat)|$($change)|$($pattern)"
+        return "$($caseIsh)|$($pidIsh)|$($pidIshOld)|$($category)|$($subcat)|$($change)|$($pattern)"
     }
 
     foreach ($group in $grouped) {
         $parts = $group.Name -split '\|'
         $caseIsh = if ($parts.Count -gt 0 -and $parts[0]) { $parts[0] } else { '-' }
         $pidIsh = if ($parts.Count -gt 1 -and $parts[1]) { $parts[1] } else { '-' }
-        $category = if ($parts.Count -gt 2 -and $parts[2]) { $parts[2] } else { '-' }
-        $subcategory = if ($parts.Count -gt 3 -and $parts[3]) { $parts[3] } else { '-' }
-        $changeType = if ($parts.Count -gt 4 -and $parts[4]) { $parts[4] } else { '-' }
-        $pattern = if ($parts.Count -gt 5 -and $parts[5]) { $parts[5] } else { '-' }
+        $pidIshOld = if ($parts.Count -gt 2 -and $parts[2]) { $parts[2] } else { '' }
+        if ($pidIshOld) { $pidIshOld = "from $pidIshOld" }
+        $category = if ($parts.Count -gt 3 -and $parts[3]) { $parts[3] } else { '-' }
+        $subcategory = if ($parts.Count -gt 4 -and $parts[4]) { $parts[4] } else { '-' }
+        $changeType = if ($parts.Count -gt 5 -and $parts[5]) { $parts[5] } else { '-' }
+        $pattern = if ($parts.Count -gt 6 -and $parts[6]) { $parts[6] } else { '-' }
 
         $color = Get-CategoryColor -Category $category
-        Write-Host "Case $($caseIsh) | PID  $($pidIsh) | Category $($category) / $($subcategory) | Change $($changeType) | Pattern $($pattern)" -ForegroundColor $color
+        Write-Host "`nCase $($caseIsh) | PID  $($pidIsh) $($pidIshOld) | Category $($category) / $($subcategory) | Change $($changeType) | Pattern $($pattern)" -ForegroundColor $color
 
-        $inputs = $group.Group | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_stage') -eq 'Input' }
+        $inputs = @($group.Group | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_stage') -eq 'Input' })
         if ($inputs -and $inputs.Count -gt 0) {
             $firstInput = Convert-ToTimestamp -Source $inputs[0]._source -TimeField $ElasticTimeField
             $lastInput = Convert-ToTimestamp -Source $inputs[-1]._source -TimeField $ElasticTimeField
-            Write-Host "  Input: $($inputs.Count) item(s), first $($firstInput), last $($lastInput)"
+            Write-Host "  Input: $($inputs.Count) item(s), $($firstInput.ToString('yyyy-MM-dd HH:mm:ss')) - $($lastInput.ToString('yyyy-MM-dd HH:mm:ss'))"
         } else {
             Write-Host '  Input: none'
         }
 
-        $outputs = $group.Group | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_stage') -eq 'Output' }
+        $outputs = @($group.Group | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_stage') -eq 'Output' })
         if ($outputs -and $outputs.Count -gt 0) {
             $partyGroups = $outputs | Group-Object -Property { Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_party' }
             foreach ($party in $partyGroups) {
                 $partyName = if ($party.Name) { $party.Name } else { '-' }
                 $firstOut = Convert-ToTimestamp -Source $party.Group[0]._source -TimeField $ElasticTimeField
                 $lastOut = Convert-ToTimestamp -Source $party.Group[-1]._source -TimeField $ElasticTimeField
-                Write-Host "  Output -> $($partyName): $($party.Count) item(s), first $($firstOut), last $($lastOut)"
+                Write-Host "  Output -> $($partyName): $($party.Count) item(s), $($firstOut.ToString('yyyy-MM-dd HH:mm:ss')) - $($lastOut.ToString('yyyy-MM-dd HH:mm:ss'))"
             }
         } else {
             Write-Host '  Output: none'
