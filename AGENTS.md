@@ -3,6 +3,7 @@
 ## Documentation
 - Update README.md if necessary, even if not asked for
 - Always add and maintain documentation at the top of a Powershell script
+- Keep SUBFL Elasticsearch context current in `SubflElasticInfo.md` when related scripts or knowledge change
 
 ## Shared Elasticsearch logic
 - ❗ Centralize Elasticsearch scroll handling in `Scripts/Common/ElasticSearchHelpers.ps1` using `Invoke-ElasticScrollSearch`. Do **not** duplicate manual paging loops inside individual scripts.
