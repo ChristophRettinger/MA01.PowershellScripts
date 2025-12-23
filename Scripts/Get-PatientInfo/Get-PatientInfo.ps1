@@ -260,7 +260,10 @@ $baseMust = @(
     ); minimum_should_match = 1 } }
 )
 
-$mustNot = @(@{ term = @{ 'WorkflowPattern' = 'REQ_RESP' } })
+$mustNot = @(
+    @{ term = @{ 'WorkflowPattern' = 'REQ_RESP' } },
+    @{ term = @{ 'BK.SUBFL_drop' = $true } }
+)
 
 if ($StartDate -or $EndDate) {
     $rangeEntry = @{ range = @{ ($ElasticTimeField) = @{} } }
