@@ -60,6 +60,13 @@
 .PARAMETER MOVENO
     Optional movement identifier (BK._MOVENO) to further narrow case results.
 
+.PARAMETER IgnoreChangeArt
+    When set, do not group or display `BK.SUBFL_changeart` values.
+
+.PARAMETER ShowAllCategories
+    When set, display all categories. When omitted, limits output to PATIENT, CASE,
+    MERGE, and SPLIT categories.
+
 .EXAMPLE
     ./Get-PatientInfo.ps1 -PIDISH 0000869517 -StartDate '2025-05-01' -EndDate '2025-05-07'
 
@@ -96,7 +103,13 @@ param(
     [string]$CASENO,
 
     [Parameter(Mandatory=$false)]
-    [string]$MOVENO
+    [string]$MOVENO,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$IgnoreChangeArt,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$ShowAllCategories
 )
 
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
@@ -416,6 +429,15 @@ foreach ($hit in $orderedHits) {
     if (-not [string]::IsNullOrWhiteSpace($val) -and $pidValues -notcontains $val) { $pidValues += $val }
 }
 
+if (-not $ShowAllCategories) {
+    $allowedCategories = @('PATIENT','CASE','MERGE','SPLIT')
+    $orderedHits = $orderedHits | Where-Object {
+        $categoryValue = Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_category'
+        if (-not $categoryValue) { return $false }
+        return $allowedCategories -contains $categoryValue.ToString().ToUpperInvariant()
+    }
+}
+
 if ($pidValues.Count -gt 0) {
     Write-Host "PID(s): $($pidValues -join ', ')" -ForegroundColor Cyan
 }
@@ -497,9 +519,13 @@ for ($i=1; $i -le $counter; $i++) {
         $pidIshOld = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH_OLD'
         $category = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_category'
         $subcat = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_subcategory'
-        $change = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_changeart'
         $pattern = Get-ElasticSourceValue -Source $src -FieldPath 'WorkflowPattern'
-        return "$($caseIsh)|$($pidIsh)|$($pidIshOld)|$($category)|$($subcat)|$($change)|$($pattern)"
+        $change = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_changeart'
+
+        $parts = @($caseIsh, $pidIsh, $pidIshOld, $category, $subcat)
+        if (-not $IgnoreChangeArt) { $parts += $change }
+        $parts += $pattern
+        return ($parts -join '|')
     }
 
     foreach ($group in $grouped) {
@@ -510,11 +536,14 @@ for ($i=1; $i -le $counter; $i++) {
         if ($pidIshOld) { $pidIshOld = "from $pidIshOld" }
         $category = if ($parts.Count -gt 3 -and $parts[3]) { $parts[3] } else { '-' }
         $subcategory = if ($parts.Count -gt 4 -and $parts[4]) { $parts[4] } else { '-' }
-        $changeType = if ($parts.Count -gt 5 -and $parts[5]) { $parts[5] } else { '-' }
-        $pattern = if ($parts.Count -gt 6 -and $parts[6]) { $parts[6] } else { '-' }
+        $changeIndex = if ($IgnoreChangeArt) { -1 } else { 5 }
+        $patternIndex = if ($IgnoreChangeArt) { 5 } else { 6 }
+        $changeType = if ($changeIndex -ge 0 -and $parts.Count -gt $changeIndex -and $parts[$changeIndex]) { $parts[$changeIndex] } else { '-' }
+        $pattern = if ($parts.Count -gt $patternIndex -and $parts[$patternIndex]) { $parts[$patternIndex] } else { '-' }
 
         $color = Get-CategoryColor -Category $category
-        Write-Host "`nCase $($caseIsh) | PID  $($pidIsh) $($pidIshOld) | Category $($category) / $($subcategory) | Change $($changeType) | Pattern $($pattern)" -ForegroundColor $color
+        $changeText = if ($IgnoreChangeArt) { '' } else { " | Change $($changeType)" }
+        Write-Host "`nCase $($caseIsh) | PID  $($pidIsh) $($pidIshOld) | Category $($category) / $($subcategory)$($changeText) | Pattern $($pattern)" -ForegroundColor $color
 
         $inputs = @($group.Group | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_stage') -eq 'Input' })
         if ($inputs -and $inputs.Count -gt 0) {
