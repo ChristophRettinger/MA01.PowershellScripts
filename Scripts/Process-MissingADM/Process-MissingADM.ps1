@@ -37,6 +37,7 @@
 
 .PARAMETER ElasticApiKeyPath
     Path to a file containing the Elasticsearch API key. Used if ElasticApiKey is not provided.
+    Defaults to '.\elastic.key'.
 
 .PARAMETER IncreaseElasticDateRange
     Number of hours to extend the Elasticsearch time range beyond the DB range.
@@ -74,7 +75,7 @@ param(
     [string]$ElasticApiKey,
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath,
+    [string]$ElasticApiKeyPath = '.\elastic.key',
 
     [Parameter(Mandatory=$false)]
     [int]$IncreaseElasticDateRange = 4,

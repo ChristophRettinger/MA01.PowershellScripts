@@ -49,6 +49,7 @@
 
 .PARAMETER ElasticApiKeyPath
     Path to a file containing the Elasticsearch API key. Used if ElasticApiKey is not provided.
+    Defaults to '.\elastic.key'.
 
 .PARAMETER IncludeElastic
     When specified, also performs the Elasticsearch query and includes its
@@ -96,7 +97,7 @@ param(
     [string]$ElasticApiKey,
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath,
+    [string]$ElasticApiKeyPath = '.\elastic.key',
 
     [Parameter(Mandatory=$false)]
     [int]$IncreaseElasticDateRange = 4,
