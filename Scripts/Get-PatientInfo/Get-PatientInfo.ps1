@@ -159,8 +159,8 @@ function Get-CategoryColor {
     if ([string]::IsNullOrWhiteSpace($Category)) { return 'White' }
 
     switch ($Category.ToUpperInvariant()) {
-        'PATIENT' { return 'Yellow' }
-        'CASE' { return 'White' }
+        'CASE' { return 'Yellow' }
+        'PATIENT' { return 'White' }
         'DIAGNOSIS' { return 'Gray' }
         'INSURANCE' { return 'Gray' }
         'MERGE' { return 'Blue' }
@@ -573,9 +573,9 @@ for ($i=1; $i -le $counter; $i++) {
         $elgaText = if ($IncludeElgaRelevant) { " | Elga $($elgaRelevant)" } else { '' }
         $changeText = if ($IgnoreChangeArt) { '' } else { " | Change $($changeType)" }
         $caseTypeSuffix = if ($caseType) { " $($caseType)" } else { '' }
-        $moveText = if ($moveNo -and $moveNo -ne '-') { " $($moveNo)" } else { ' -' }
+        $moveText = if ($moveNo -and $moveNo -ne '-') { " $($moveNo)" } else { '' }
         $pidOldText = if ($pidIshOld) { " $($pidIshOld)" } else { '' }
-        Write-Host "`nCase $($caseIsh) | PID  $($pidIsh)$($caseTypeSuffix)$($moveText)$($pidOldText)$($elgaText) | Category $($category) / $($subcategory)$($changeText)" -ForegroundColor $color -NoNewline
+        Write-Host "`nCase $($caseIsh)$($caseTypeSuffix)$($moveText) | PID $($pidIsh)$($pidOldText)$($elgaText) | $($category) / $($subcategory)$($changeText)" -ForegroundColor $color -NoNewline
         if ($pattern -eq "ERROR") {
             Write-host "  $($pattern)" -ForegroundColor Red
         }
