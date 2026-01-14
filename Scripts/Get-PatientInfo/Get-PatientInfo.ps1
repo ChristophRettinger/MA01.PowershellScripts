@@ -67,6 +67,10 @@
     When set, display all categories. When omitted, limits output to PATIENT, CASE,
     MERGE, and SPLIT categories.
 
+.PARAMETER IncludeElgaRelevant
+    When set (default), include `BK._ELGA_RELEVANT` in the grouping and display it as
+    "Elga". Use `-IncludeElgaRelevant:$false` to omit this field.
+
 .EXAMPLE
     ./Get-PatientInfo.ps1 -PIDISH 0000869517 -StartDate '2025-05-01' -EndDate '2025-05-07'
 
@@ -109,7 +113,10 @@ param(
     [switch]$IgnoreChangeArt,
 
     [Parameter(Mandatory=$false)]
-    [switch]$ShowAllCategories
+    [switch]$ShowAllCategories,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$IncludeElgaRelevant = $true
 )
 
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
@@ -189,6 +196,19 @@ function Convert-ToTimestamp {
         return $parsed
     }
     return $null
+}
+
+function Get-ElgaDisplayValue {
+    param(
+        [object]$Source
+    )
+
+    $value = Get-ElasticSourceValue -Source $Source -FieldPath 'BK._ELGA_RELEVANT'
+    if ($null -eq $value -or [string]::IsNullOrWhiteSpace($value)) {
+        return '(none)'
+    }
+
+    return $value.ToString().ToLowerInvariant()
 }
 
 function Get-PidValuesFromHits {
@@ -513,8 +533,10 @@ for ($i=1; $i -le $counter; $i++) {
         $subcat = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_subcategory'
         $pattern = Get-ElasticSourceValue -Source $src -FieldPath 'WorkflowPattern'
         $change = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_changeart'
+        $elgaRelevant = if ($IncludeElgaRelevant) { Get-ElgaDisplayValue -Source $src } else { $null }
 
         $parts = @($caseIsh, $pidIsh, $pidIshOld, $category, $subcat)
+        if ($IncludeElgaRelevant) { $parts += $elgaRelevant }
         if (-not $IgnoreChangeArt) { $parts += $change }
         $parts += $pattern
         return ($parts -join '|')
@@ -528,14 +550,17 @@ for ($i=1; $i -le $counter; $i++) {
         if ($pidIshOld) { $pidIshOld = "from $pidIshOld" }
         $category = if ($parts.Count -gt 3 -and $parts[3]) { $parts[3] } else { '-' }
         $subcategory = if ($parts.Count -gt 4 -and $parts[4]) { $parts[4] } else { '-' }
-        $changeIndex = if ($IgnoreChangeArt) { -1 } else { 5 }
-        $patternIndex = if ($IgnoreChangeArt) { 5 } else { 6 }
+        $elgaIndex = if ($IncludeElgaRelevant) { 5 } else { -1 }
+        $changeIndex = if ($IgnoreChangeArt) { -1 } else { if ($IncludeElgaRelevant) { 6 } else { 5 } }
+        $patternIndex = if ($IgnoreChangeArt) { if ($IncludeElgaRelevant) { 6 } else { 5 } } else { if ($IncludeElgaRelevant) { 7 } else { 6 } }
+        $elgaRelevant = if ($IncludeElgaRelevant -and $elgaIndex -ge 0 -and $parts.Count -gt $elgaIndex -and $parts[$elgaIndex]) { $parts[$elgaIndex] } else { '' }
         $changeType = if ($changeIndex -ge 0 -and $parts.Count -gt $changeIndex -and $parts[$changeIndex]) { $parts[$changeIndex] } else { '-' }
         $pattern = if ($parts.Count -gt $patternIndex -and $parts[$patternIndex]) { $parts[$patternIndex] } else { '-' }
 
         $color = Get-CategoryColor -Category $category
+        $elgaText = if ($IncludeElgaRelevant) { " | Elga $($elgaRelevant)" } else { '' }
         $changeText = if ($IgnoreChangeArt) { '' } else { " | Change $($changeType)" }
-        Write-Host "`nCase $($caseIsh) | PID  $($pidIsh)$($pidIshOld) | Category $($category) / $($subcategory) | Change $($changeType)" -ForegroundColor $color -NoNewline
+        Write-Host "`nCase $($caseIsh) | PID  $($pidIsh)$($pidIshOld)$($elgaText) | Category $($category) / $($subcategory)$($changeText)" -ForegroundColor $color -NoNewline
         if ($pattern -eq "ERROR") {
             Write-host "  $($pattern)" -ForegroundColor Red
         }
