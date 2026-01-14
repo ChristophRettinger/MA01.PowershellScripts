@@ -27,6 +27,7 @@ This note consolidates how Subscription Flow (SUBFL) scenarios log to Elasticsea
 - **BK._CASENO_ISH** (Fallzahl): case number variant such as `7622000264` with pattern `\d{10}`.
 - **BK._PID**: patient identifier shown as **AID** in script output to highlight the patient reference alongside case identifiers.
 - **BK._PID_ISH** (also called **PID**, shown as **Fallzahl** in script output): patient identifier such as `0000869517` with pattern `\d{10}`.
+- **BK._CASETYPE**: single-character case type indicator associated with a case.
 - **BK.SUBFL_category**: identifies the category of data (e.g., `CASE`, `PATIENT`, `DIAGNOSIS`).
 - **BK.SUBFL_changeart**: denotes change type (`INSERT`, `UPDATE`, or `DELETE`).
 - **BK.SUBFL_subcategory**: further refines the category (e.g., `Visit`, `Admission`, `Transfer`); only present for some categories.

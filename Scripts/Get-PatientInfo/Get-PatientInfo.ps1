@@ -13,7 +13,9 @@
     Input stage range and counts plus Output stage ranges grouped by receiver
     (`BK.SUBFL_party`). The case/movement header is deduped by case and movement
     (not BusinessCaseId) while still showing any BusinessCaseId or MSGID values
-    discovered.
+    discovered. Overview headers include case type (BK._CASETYPE) and the AID
+    (BK._CASENO). Detail grouping includes case type and movement after the PID
+    value, with case type shown as a single-character suffix on the PID.
 
     When a `BK._PID_ISH_OLD` value is discovered in any hit, the script automatically
     re-runs the search for that PID in `BK._PID_ISH` and merges the data. If only a
@@ -466,12 +468,16 @@ $headerMap = @{}
 foreach ($hit in $orderedHits) {
     $src = $hit._source
     $caseIsh = Get-ElasticSourceValue -Source $src -FieldPath 'BK._CASENO_ISH'
+    $aid = Get-ElasticSourceValue -Source $src -FieldPath 'BK._CASENO'
     $moveNo = Get-ElasticSourceValue -Source $src -FieldPath 'BK._MOVENO'
     $pidish = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH'
-    $key = "${caseIsh}|${moveNo}|${pidish}"
+    $caseType = Get-ElasticSourceValue -Source $src -FieldPath 'BK._CASETYPE'
+    $key = "${caseIsh}|${aid}|${moveNo}|${pidish}|${caseType}"
     if (-not $headerMap.ContainsKey($key)) {
         $headerMap[$key] = @{
+            CASETYPE = if ($caseType) { $caseType } else { '-' }
             CASENO_ISH = if ($caseIsh) { $caseIsh } else { '-' }
+            AID = if ($aid) { $aid } else { '-' }
             MOVENO = if ($moveNo) { $moveNo } else { '-' }
             PIDISH = if ($pidish) { $pidish } else { '-' }
         }
@@ -481,13 +487,15 @@ foreach ($hit in $orderedHits) {
 if ($headerMap.Values.Count -gt 0) {
     $headerRows = foreach ($entry in $headerMap.Values) {        
         [PSCustomObject]@{
+            CASETYPE = $entry.CASETYPE
             CASENO_ISH = $entry.CASENO_ISH
+            AID = $entry.AID
             MOVENO = $entry.MOVENO
             PIDISH = $entry.PIDISH
         }
     }
 
-    $headerRows | Where-Object { $_.CASENO_ISH -ne "-" } | Sort-Object CASENO_ISH, MOVENO | Format-Table -AutoSize
+    $headerRows | Where-Object { $_.CASENO_ISH -ne "-" -or $_.AID -ne "-" } | Sort-Object CASENO_ISH, MOVENO | Format-Table -AutoSize
 }
 
 $segments = @{}
@@ -529,13 +537,15 @@ for ($i=1; $i -le $counter; $i++) {
         $caseIsh = Get-ElasticSourceValue -Source $src -FieldPath 'BK._CASENO_ISH'
         $pidIsh = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH'
         $pidIshOld = Get-ElasticSourceValue -Source $src -FieldPath 'BK._PID_ISH_OLD'
+        $moveNo = Get-ElasticSourceValue -Source $src -FieldPath 'BK._MOVENO'
+        $caseType = Get-ElasticSourceValue -Source $src -FieldPath 'BK._CASETYPE'
         $category = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_category'
         $subcat = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_subcategory'
         $pattern = Get-ElasticSourceValue -Source $src -FieldPath 'WorkflowPattern'
         $change = Get-ElasticSourceValue -Source $src -FieldPath 'BK.SUBFL_changeart'
         $elgaRelevant = if ($IncludeElgaRelevant) { Get-ElgaDisplayValue -Source $src } else { $null }
 
-        $parts = @($caseIsh, $pidIsh, $pidIshOld, $category, $subcat)
+        $parts = @($caseIsh, $pidIsh, $caseType, $moveNo, $pidIshOld, $category, $subcat)
         if ($IncludeElgaRelevant) { $parts += $elgaRelevant }
         if (-not $IgnoreChangeArt) { $parts += $change }
         $parts += $pattern
@@ -546,13 +556,15 @@ for ($i=1; $i -le $counter; $i++) {
         $parts = $group.Name -split '\|'
         $caseIsh = if ($parts.Count -gt 0 -and $parts[0]) { $parts[0] } else { '-' }
         $pidIsh = if ($parts.Count -gt 1 -and $parts[1]) { $parts[1] } else { '-' }
-        $pidIshOld = if ($parts.Count -gt 2 -and $parts[2]) { $parts[2] } else { '' }
+        $caseType = if ($parts.Count -gt 2 -and $parts[2]) { $parts[2] } else { '' }
+        $moveNo = if ($parts.Count -gt 3 -and $parts[3]) { $parts[3] } else { '-' }
+        $pidIshOld = if ($parts.Count -gt 4 -and $parts[4]) { $parts[4] } else { '' }
         if ($pidIshOld) { $pidIshOld = "from $pidIshOld" }
-        $category = if ($parts.Count -gt 3 -and $parts[3]) { $parts[3] } else { '-' }
-        $subcategory = if ($parts.Count -gt 4 -and $parts[4]) { $parts[4] } else { '-' }
-        $elgaIndex = if ($IncludeElgaRelevant) { 5 } else { -1 }
-        $changeIndex = if ($IgnoreChangeArt) { -1 } else { if ($IncludeElgaRelevant) { 6 } else { 5 } }
-        $patternIndex = if ($IgnoreChangeArt) { if ($IncludeElgaRelevant) { 6 } else { 5 } } else { if ($IncludeElgaRelevant) { 7 } else { 6 } }
+        $category = if ($parts.Count -gt 5 -and $parts[5]) { $parts[5] } else { '-' }
+        $subcategory = if ($parts.Count -gt 6 -and $parts[6]) { $parts[6] } else { '-' }
+        $elgaIndex = if ($IncludeElgaRelevant) { 7 } else { -1 }
+        $changeIndex = if ($IgnoreChangeArt) { -1 } else { if ($IncludeElgaRelevant) { 8 } else { 7 } }
+        $patternIndex = if ($IgnoreChangeArt) { if ($IncludeElgaRelevant) { 8 } else { 7 } } else { if ($IncludeElgaRelevant) { 9 } else { 8 } }
         $elgaRelevant = if ($IncludeElgaRelevant -and $elgaIndex -ge 0 -and $parts.Count -gt $elgaIndex -and $parts[$elgaIndex]) { $parts[$elgaIndex] } else { '' }
         $changeType = if ($changeIndex -ge 0 -and $parts.Count -gt $changeIndex -and $parts[$changeIndex]) { $parts[$changeIndex] } else { '-' }
         $pattern = if ($parts.Count -gt $patternIndex -and $parts[$patternIndex]) { $parts[$patternIndex] } else { '-' }
@@ -560,7 +572,10 @@ for ($i=1; $i -le $counter; $i++) {
         $color = Get-CategoryColor -Category $category
         $elgaText = if ($IncludeElgaRelevant) { " | Elga $($elgaRelevant)" } else { '' }
         $changeText = if ($IgnoreChangeArt) { '' } else { " | Change $($changeType)" }
-        Write-Host "`nCase $($caseIsh) | PID  $($pidIsh)$($pidIshOld)$($elgaText) | Category $($category) / $($subcategory)$($changeText)" -ForegroundColor $color -NoNewline
+        $caseTypeSuffix = if ($caseType) { " $($caseType)" } else { '' }
+        $moveText = if ($moveNo -and $moveNo -ne '-') { " $($moveNo)" } else { ' -' }
+        $pidOldText = if ($pidIshOld) { " $($pidIshOld)" } else { '' }
+        Write-Host "`nCase $($caseIsh) | PID  $($pidIsh)$($caseTypeSuffix)$($moveText)$($pidOldText)$($elgaText) | Category $($category) / $($subcategory)$($changeText)" -ForegroundColor $color -NoNewline
         if ($pattern -eq "ERROR") {
             Write-host "  $($pattern)" -ForegroundColor Red
         }
