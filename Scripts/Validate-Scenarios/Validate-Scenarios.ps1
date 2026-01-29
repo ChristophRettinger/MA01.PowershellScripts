@@ -107,7 +107,7 @@ $scenarioResults = @{}
 $totalFilesProcessed = 0
 
 $files = Get-ChildItem -Path $resolvedPath -Recurse -File | Where-Object {
-    $_.Name -like $processModelPattern -or $_.Name -like $channelPattern -or $_.Name -like $mappingPattern
+    ($_.Name -like $processModelPattern -or $_.Name -like $channelPattern -or $_.Name -like $mappingPattern) -and $_.Extension -eq "" 
 }
 
 foreach ($file in $files) {
