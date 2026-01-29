@@ -498,6 +498,30 @@ if ($headerMap.Values.Count -gt 0) {
     $headerRows | Where-Object { $_.CASENO_ISH -ne "-" -or $_.AID -ne "-" } | Sort-Object CASENO_ISH, MOVENO | Format-Table -AutoSize
 }
 
+$categoryList = [System.Collections.Generic.List[string]]::new()
+$categorySet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($hit in $orderedHits) {
+    $categoryValue = Get-ElasticSourceValue -Source $hit._source -FieldPath 'BK.SUBFL_category'
+    if ([string]::IsNullOrWhiteSpace($categoryValue)) { continue }
+    $normalizedCategory = $categoryValue.ToString().ToUpperInvariant()
+    if ($categorySet.Add($normalizedCategory)) {
+        $null = $categoryList.Add($normalizedCategory)
+    }
+}
+
+if ($categoryList.Count -gt 0) {
+    Write-Host "Occurring Categories: " -NoNewline
+    for ($idx = 0; $idx -lt $categoryList.Count; $idx++) {
+        $categoryName = $categoryList[$idx]
+        $color = Get-CategoryColor -Category $categoryName
+        Write-Host $categoryName -ForegroundColor $color -NoNewline
+        if ($idx -lt ($categoryList.Count - 1)) {
+            Write-Host " " -NoNewline
+        }
+    }
+    Write-Host ""
+}
+
 $segments = @{}
 $currentWorkflowPattern = ""
 $counter = 0
