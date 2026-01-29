@@ -81,8 +81,8 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$DatabaseServerConnection = 'MedarchivSql.wienkav.at,1433',
 
-    [Parameter(Mandatory=$true)]
-    [string]$Anstalt,
+    [Parameter(Mandatory=$false)]
+    [string]$Anstalt = 'All',
 
     [Parameter(Mandatory=$false)]
     [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
@@ -103,7 +103,7 @@ param(
     [int]$IncreaseElasticDateRange = 4,
 
     [Parameter(Mandatory=$false)]
-    [switch]$IncludeElastic,
+    [switch]$IncludeElastic = $true,
 
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output')
