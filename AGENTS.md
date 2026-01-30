@@ -2,6 +2,7 @@
 
 ## Documentation
 - Update README.md if necessary, even if not asked for
+- Keep README.md script descriptions concise and consistent; avoid default values, color mentions, or overly detailed parameter listings.
 - Always add and maintain documentation at the top of a Powershell script
 - Keep SUBFL Elasticsearch context current in `SubflElasticInfo.md` when related scripts or knowledge change
 - Update `ScenarioInfo.md` when scripts or knowledge change
