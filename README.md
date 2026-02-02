@@ -17,7 +17,7 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 - **Evaluate-OrchestraErrorsViaElastic.ps1** - Aggregates failed Orchestra scenarios from Elasticsearch and optionally exports normalized error XML.
 - **Evaluate-AdmKavideErrors.ps1** - Collects and summarizes Kavide scenario errors from Elasticsearch with per-case details.
 - **Get-PatientInfo.ps1** - Retrieves SUBFL HCM messages for a patient or case and exports structured JSON.
-- **Validate-Scenarios.ps1** - Validates scenario configuration files and reports findings by scenario.
+- **Validate-Scenarios.ps1** - Validates scenario configuration files, reporting naming-convention codes and optional description-based exceptions.
 - **Transfer-OperationData.ps1** - Transfers DataStore rows into OrchestraOperationData using resumable batches.
 
 ## Shared utilities

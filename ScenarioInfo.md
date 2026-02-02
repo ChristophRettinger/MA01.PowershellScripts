@@ -23,6 +23,8 @@ Process model files are XML documents named `ProcessModell_*` (no extension).
 
 XML root name: `ProcessModel`.
 
+Each configuration XML supports a `description` element directly below the root. Validation can read exception codes from this description to allow deviations from the default rules. Default values typically omit explicit description codes but are still valid.
+
 Validation reads the following fields:
 
 - `/ProcessModel/name`: Process model name.
@@ -50,6 +52,8 @@ Scheduling shorthand (used in naming conventions):
 
 Channel files are XML documents named `Channel_*` with no extension. XML root names vary by channel type.
 
+Each channel XML supports a `description` element directly below the root. Validation can read exception codes from this description to allow deviations from the default rules.
+
 Validation reads channel fields from the document root regardless of the specific channel type:
 
 - `/*/name`: Channel name.
@@ -60,6 +64,8 @@ A channel is considered non-concurrent when `numberOfInstances` is `1`.
 ## Message mapping files (`MessageMapping_*`)
 
 XML root name: `emds.mapping.proc.MappingScript`.
+
+Each mapping XML supports a `description` element directly below the root. Validation can read exception codes from this description to allow deviations from the default rules.
 
 Validation reads:
 
@@ -102,3 +108,18 @@ Mappings are flagged when `parallelExecution` is not `true`.
   - **ST** Resource usage strategy
     - `p`: Parallel execution
     - `s`: Sequential execution
+
+## Description-based exceptions
+
+Validation reads optional codes embedded in the `description` text (for example: `PM:v; RS:a; SC:p75`). Codes can appear anywhere in the description and multiple codes can be listed. Only codes that align to validation checks are considered; unsupported codes such as `SC` are ignored.
+
+Supported exception codes:
+
+- **PM** Process Mode (`v`, `vr`, `p`)
+- **RS** Redeployment Strategy (`a`, `r`)
+- **MR** Manual Restart (`e`, `d`)
+- **SI** Input Signal (`p`, `t`)
+- **ST** Resource usage strategy (`p`, `s`) for channels and mappings
+- **BK** Business key maximum (`#`)
+
+When the script finds a non-default configuration that matches an exception code, it suppresses the entry by default and can optionally list it with an "exception configured" note.
