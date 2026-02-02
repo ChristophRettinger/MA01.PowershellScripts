@@ -50,10 +50,10 @@ Scheduling shorthand (used in naming conventions):
 
 Channel files are XML documents named `Channel_*` with no extension. XML root names vary by channel type.
 
-Validation currently reads HTTP outbound channel nodes:
+Validation reads channel fields from the document root regardless of the specific channel type:
 
-- `/emds.epi.impl.adapter.http.outbound.HttpOutboundGeneralChannel/name`: Channel name.
-- `/emds.epi.impl.adapter.http.outbound.HttpOutboundGeneralChannel/numberOfInstances`: Concurrency count.
+- `/*/name`: Channel name.
+- `/*/numberOfInstances`: Concurrency count.
 
 A channel is considered non-concurrent when `numberOfInstances` is `1`.
 
