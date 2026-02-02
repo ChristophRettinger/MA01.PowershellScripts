@@ -1,4 +1,4 @@
-<#!
+<#
 .SYNOPSIS
     Validates Orchestra scenario XML configuration files across scenario subfolders.
 
