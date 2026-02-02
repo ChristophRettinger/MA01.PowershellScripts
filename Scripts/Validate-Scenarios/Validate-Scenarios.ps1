@@ -8,13 +8,19 @@
     path), the script checks process model settings, business key counts, channel
     concurrency, and mapping parallel execution rules. Results are grouped by
     scenario name and printed with colored headings for the scenario, process
-    models, channels, and mappings.
+    models, channels, and mappings. Description tags in each XML document can
+    include exception codes (for example: "PM:v; RS:a; SC:p75") to allow deviations
+    from the default validation rules.
 
 .PARAMETER Path
     Root folder that contains scenario subfolders. Defaults to the current directory.
 
 .PARAMETER MaxBusinessKeyCount
     Maximum allowed number of business keys in a process model. Defaults to 6.
+
+.PARAMETER ShowExceptions
+    When set, includes entries that match a configured exception code in the
+    output list with an "exception configured" note.
 
 .EXAMPLE
     .\Validate-Scenarios.ps1 -Path "D:\Scenarios" -MaxBusinessKeyCount 8
@@ -25,7 +31,10 @@ param (
     [string]$Path = '.',
 
     [Parameter(Mandatory = $false)]
-    [int]$MaxBusinessKeyCount = 6
+    [int]$MaxBusinessKeyCount = 6,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$ShowExceptions
 )
 
 $resolvedPath = (Resolve-Path -Path $Path).Path
@@ -109,6 +118,74 @@ function Get-NodeValue {
     return 'N/A'
 }
 
+function Get-DescriptionTokens {
+    param (
+        [Parameter(Mandatory = $true)]
+        [xml]$XmlDocument
+    )
+
+    $descriptionNode = $XmlDocument.SelectSingleNode('/*[1]/description')
+    if (-not $descriptionNode -or [string]::IsNullOrWhiteSpace($descriptionNode.InnerText)) {
+        return @{}
+    }
+
+    $tokens = @{}
+    $matches = [regex]::Matches($descriptionNode.InnerText, '\b(?<key>[A-Z]{2})\s*:\s*(?<value>[A-Za-z0-9]+)\b')
+    foreach ($match in $matches) {
+        $key = $match.Groups['key'].Value
+        $value = $match.Groups['value'].Value
+        if (-not $tokens.ContainsKey($key)) {
+            $tokens[$key] = New-Object System.Collections.Generic.List[string]
+        }
+        $tokens[$key].Add($value)
+    }
+
+    return $tokens
+}
+
+function Test-ExceptionMatch {
+    param (
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Tokens,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Key,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    if (-not $Tokens.ContainsKey($Key)) {
+        return $false
+    }
+
+    return $Tokens[$Key] -contains $Value
+}
+
+function Get-BusinessKeyExceptionLimit {
+    param (
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Tokens
+    )
+
+    if (-not $Tokens.ContainsKey('BK')) {
+        return $null
+    }
+
+    $limits = foreach ($entry in $Tokens['BK']) {
+        $value = 0
+        if ([int]::TryParse($entry, [ref]$value)) {
+            $value
+        }
+    }
+
+    if (-not $limits) {
+        return $null
+    }
+
+    return ($limits | Measure-Object -Maximum).Maximum
+}
+
 $scenarioResults = @{}
 $totalFilesProcessed = 0
 
@@ -139,6 +216,8 @@ foreach ($file in $files) {
         continue
     }
 
+    $descriptionTokens = Get-DescriptionTokens -XmlDocument $xmlContent
+
     if ($file.Name -like $processModelPattern) {
         $businessKeysCount = ($xmlContent.SelectNodes($businessKeysXPath) | Measure-Object).Count
         $processModelName = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.name
@@ -146,22 +225,65 @@ foreach ($file in $files) {
         $issues = New-Object System.Collections.Generic.List[string]
 
         $isDurable = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.isDurable
-        if ($isDurable -eq 'false') { $issues.Add('Signal subscription not persistent') }
-
         $manualRestart = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.manualRestart
-        if ($manualRestart -ne 'true') { $issues.Add('Manual restart disabled') }
-
         $isPersistent = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.isPersistent
-        if ($isPersistent -ne 'false') { $issues.Add('Process model is persistent') }
-
         $redeployPolicy = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.redeployPolicy
-        if ($redeployPolicy -ne '1') { $issues.Add('Redeployment strategy is set to abort') }
-
         $volatilePolicy = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.volatilePolicy
-        if ($volatilePolicy -ne '1') { $issues.Add('Process model is not set to volatile with recovery') }
+
+        $processModeCode = if ($isPersistent -eq 'true') {
+            'p'
+        } elseif ($volatilePolicy -eq '1') {
+            'vr'
+        } else {
+            'v'
+        }
+        if ($processModeCode -ne 'vr') {
+            $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'PM' -Value $processModeCode
+            if (-not $hasException) {
+                $issues.Add("PM:$($processModeCode)")
+            } elseif ($ShowExceptions) {
+                $issues.Add("PM:$($processModeCode) (exception configured)")
+            }
+        }
+
+        $redeployCode = if ($redeployPolicy -eq '1') { 'r' } else { 'a' }
+        if ($redeployCode -ne 'r') {
+            $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'RS' -Value $redeployCode
+            if (-not $hasException) {
+                $issues.Add("RS:$($redeployCode)")
+            } elseif ($ShowExceptions) {
+                $issues.Add("RS:$($redeployCode) (exception configured)")
+            }
+        }
+
+        $manualRestartCode = if ($manualRestart -eq 'true') { 'e' } else { 'd' }
+        if ($manualRestartCode -ne 'e') {
+            $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'MR' -Value $manualRestartCode
+            if (-not $hasException) {
+                $issues.Add("MR:$($manualRestartCode)")
+            } elseif ($ShowExceptions) {
+                $issues.Add("MR:$($manualRestartCode) (exception configured)")
+            }
+        }
+
+        $signalCode = if ($isDurable -eq 'true') { 'p' } else { 't' }
+        if ($signalCode -ne 'p') {
+            $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'SI' -Value $signalCode
+            if (-not $hasException) {
+                $issues.Add("SI:$($signalCode)")
+            } elseif ($ShowExceptions) {
+                $issues.Add("SI:$($signalCode) (exception configured)")
+            }
+        }
 
         if ($businessKeysCount -gt $MaxBusinessKeyCount) {
-            $issues.Add("Too many business keys, Count: $($businessKeysCount)")
+            $exceptionLimit = Get-BusinessKeyExceptionLimit -Tokens $descriptionTokens
+            $hasException = $null -ne $exceptionLimit -and $businessKeysCount -le $exceptionLimit
+            if (-not $hasException) {
+                $issues.Add("BK:$($businessKeysCount) (max $($MaxBusinessKeyCount))")
+            } elseif ($ShowExceptions) {
+                $issues.Add("BK:$($businessKeysCount) (exception BK:$($exceptionLimit))")
+            }
         }
 
         if ($issues.Count -gt 0) {
@@ -178,12 +300,23 @@ foreach ($file in $files) {
     if ($file.Name -like $channelPattern) {
         $channelName = Get-NodeValue -XmlDocument $xmlContent -XPath '/*[1]/name'
         $numberOfInstances = Get-NodeValue -XmlDocument $xmlContent -XPath '/*[1]/numberOfInstances'
+        $strategyCode = if ($numberOfInstances -eq '1') { 's' } else { 'p' }
 
-        if ($numberOfInstances -eq '1') {
-            $scenarioResults[$scenarioInfo.Name].Channels += [PSCustomObject]@{
-                Name = $channelName
-                Path = $filePath
-                Issues = @("Channel $($channelName) is not concurrent")
+        if ($strategyCode -ne 'p') {
+            $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'ST' -Value $strategyCode
+            $issueList = New-Object System.Collections.Generic.List[string]
+            if (-not $hasException) {
+                $issueList.Add("ST:$($strategyCode)")
+            } elseif ($ShowExceptions) {
+                $issueList.Add("ST:$($strategyCode) (exception configured)")
+            }
+
+            if ($issueList.Count -gt 0) {
+                $scenarioResults[$scenarioInfo.Name].Channels += [PSCustomObject]@{
+                    Name = $channelName
+                    Path = $filePath
+                    Issues = $issueList
+                }
             }
         }
 
@@ -193,12 +326,23 @@ foreach ($file in $files) {
     if ($file.Name -like $mappingPattern) {
         $mappingName = Get-NodeValue -XmlDocument $xmlContent -XPath '/emds.mapping.proc.MappingScript/name'
         $parallelExecution = Get-NodeValue -XmlDocument $xmlContent -XPath '/emds.mapping.proc.MappingScript/parallelExecution'
+        $strategyCode = if ($parallelExecution -eq 'true') { 'p' } else { 's' }
 
-        if ($parallelExecution -ne 'true') {
-            $scenarioResults[$scenarioInfo.Name].Mappings += [PSCustomObject]@{
-                Name = $mappingName
-                Path = $filePath
-                Issues = @("Mapping $($mappingName) is not concurrent")
+        if ($strategyCode -ne 'p') {
+            $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'ST' -Value $strategyCode
+            $issueList = New-Object System.Collections.Generic.List[string]
+            if (-not $hasException) {
+                $issueList.Add("ST:$($strategyCode)")
+            } elseif ($ShowExceptions) {
+                $issueList.Add("ST:$($strategyCode) (exception configured)")
+            }
+
+            if ($issueList.Count -gt 0) {
+                $scenarioResults[$scenarioInfo.Name].Mappings += [PSCustomObject]@{
+                    Name = $mappingName
+                    Path = $filePath
+                    Issues = $issueList
+                }
             }
         }
     }
