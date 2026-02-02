@@ -332,6 +332,7 @@ $outputLines = New-Object System.Collections.Generic.List[string]
 function Add-OutputLine {
     param (
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string]$Line
     )
 
