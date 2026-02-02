@@ -12,6 +12,16 @@
     include exception codes (for example: "PM:v; RS:a; SC:p75") to allow deviations
     from the default validation rules.
 
+.NOTES
+    Default naming expectations (documented for reference even if not validated):
+    - PM (Process Mode): vr (volatile with recovery)
+    - RS (Redeployment Strategy): r (restart on redeploy)
+    - MR (Manual Restart): e (manual restart enabled)
+    - SC (Scheduling): p (parallel unbounded scheduling)
+    - BK (Business Keys): MaxBusinessKeyCount (maximum allowed business keys)
+    - SI (Input Signal): p (persistent subscription)
+    - ST (Resource usage strategy): p (parallel execution) for channels and mappings
+
 .PARAMETER Path
     Root folder that contains scenario subfolders. Defaults to the current directory.
 
