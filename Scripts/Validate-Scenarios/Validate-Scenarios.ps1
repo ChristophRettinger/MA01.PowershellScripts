@@ -52,7 +52,7 @@ $mappingPattern = 'MessageMapping_*'
 
 $businessKeysXPath = '/ProcessModel/businessKeys/Property'
 $processModelXPaths = [ordered]@{
-    isDurable = '/ProcessModel/processObjects/EventStart/trigger/isDurable'
+    isDurable = '/ProcessModel/processObjects/EventStart/trigger[isThrowing="false"]/isDurable'
     isPersistent = '/ProcessModel/isPersistent'
     redeployPolicy = '/ProcessModel/redeployPolicy'
     volatilePolicy = '/ProcessModel/volatilePoicy'
@@ -235,7 +235,7 @@ function New-ValidationIssue {
     )
 
     return [PSCustomObject]@{
-        Short = "$Category:$($Code)"
+        Short = "$($Category):$($Code)"
         Message = $Message
     }
 }
@@ -343,17 +343,19 @@ foreach ($file in $files) {
             }
         }
 
-        $signalCode = if ($isDurable -eq 'true') { 'p' } else { 't' }
-        if ((Test-CategoryEnabled -Category 'SI') -and $signalCode -ne 'p') {
-            $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'SI' -Value $signalCode
-            $signalLabel = if ($signalCode -eq 'p') { 'persistent' } else { 'transient' }
-            if (-not $hasException) {
-                $issues.Add((New-ValidationIssue -Category 'SI' -Code $signalCode -Message "Signal subscription is $($signalLabel) (expected persistent)."))
-            } elseif ($ShowExceptions) {
-                $issues.Add((New-ValidationIssue -Category 'SI' -Code $signalCode -Message 'Exception configured.'))
-            }
-        }
-
+		if ($isDurable -ne 'N/A') {
+			$signalCode = if ($isDurable -eq 'true') { 'p' } else { 't' }
+			if ((Test-CategoryEnabled -Category 'SI') -and $signalCode -ne 'p') {
+				$hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'SI' -Value $signalCode
+				$signalLabel = if ($signalCode -eq 'p') { 'persistent' } else { 'transient' }
+				if (-not $hasException) {
+					$issues.Add((New-ValidationIssue -Category 'SI' -Code $signalCode -Message "Signal subscription is $($signalLabel) (expected persistent)."))
+				} elseif ($ShowExceptions) {
+					$issues.Add((New-ValidationIssue -Category 'SI' -Code $signalCode -Message 'Exception configured.'))
+				}
+			}
+		}
+		
         if ((Test-CategoryEnabled -Category 'BK') -and $businessKeysCount -gt $MaxBusinessKeyCount) {
             $exceptionLimit = Get-BusinessKeyExceptionLimit -Tokens $descriptionTokens
             $hasException = $null -ne $exceptionLimit -and $businessKeysCount -le $exceptionLimit
