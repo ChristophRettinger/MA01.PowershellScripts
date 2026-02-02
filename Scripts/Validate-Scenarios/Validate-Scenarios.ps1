@@ -4,13 +4,14 @@
 
 .DESCRIPTION
     Scans the provided root folder for ProcessModell_*, Channel_*, and MessageMapping_*
-    XML files. For every scenario (grouped by the top-level folder beneath the root
-    path), the script checks process model settings, business key counts, channel
-    concurrency, and mapping parallel execution rules. Results are grouped by
-    scenario name and printed with colored headings for the scenario, process
-    models, channels, and mappings. Description tags in each XML document can
-    include exception codes (for example: "PM:v; RS:a; SC:p75") to allow deviations
-    from the default validation rules.
+    XML files. Optionally, PSC scenario archives can be opened and inspected for the
+    same configuration files. For every scenario (grouped by the top-level folder
+    beneath the root path, or by PSC file name), the script checks process model
+    settings, business key counts, channel concurrency, and mapping parallel
+    execution rules. Results are grouped by scenario name and printed with colored
+    headings for the scenario, process models, channels, and mappings. Description
+    tags in each XML document can include exception codes (for example: "PM:v; RS:a;
+    SC:p75") to allow deviations from the default validation rules.
 
 .NOTES
     Default naming expectations (documented for reference even if not validated):
@@ -36,6 +37,18 @@
     Optional list of validation categories to check (for example: ST, PM). When
     omitted, all categories are validated.
 
+.PARAMETER Filter
+    Optional wildcard filter (or list of filters) that must match file or folder
+    names within the target directory. Use "all" (default) to include every
+    file and folder.
+
+.PARAMETER IncludePsc
+    When set, also inspects .psc archive files found beneath the target directory.
+
+.PARAMETER Output
+    Optional file path or folder path used to write a text copy of the validation
+    results.
+
 .EXAMPLE
     .\Validate-Scenarios.ps1 -Path "D:\Scenarios" -MaxBusinessKeyCount 8
 #>
@@ -51,7 +64,16 @@ param (
     [switch]$ShowExceptions,
 
     [Parameter(Mandatory = $false)]
-    [string[]]$ErrorCategories
+    [string[]]$ErrorCategories,
+
+    [Parameter(Mandatory = $false)]
+    [string[]]$Filter = @('all'),
+
+    [Parameter(Mandatory = $false)]
+    [switch]$IncludePsc,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Output
 )
 
 $resolvedPath = (Resolve-Path -Path $Path).Path
@@ -96,6 +118,10 @@ if ($categorySet.Count -eq 0) {
     }
 }
 
+if ($IncludePsc) {
+    Add-Type -AssemblyName 'System.IO.Compression.FileSystem' | Out-Null
+}
+
 function Get-ScenarioInfo {
     param (
         [Parameter(Mandatory = $true)]
@@ -136,6 +162,39 @@ function Get-XmlDocument {
     )
 
     return [xml](Get-Content -Path $FilePath -Raw)
+}
+
+function Test-PathMatchesFilter {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Filters
+    )
+
+    if (-not $Filters -or ($Filters.Count -eq 1 -and $Filters[0].Equals('all', [System.StringComparison]::OrdinalIgnoreCase))) {
+        return $true
+    }
+
+    $segments = $Path -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    foreach ($pattern in $Filters) {
+        if ([string]::IsNullOrWhiteSpace($pattern)) {
+            continue
+        }
+
+        if ($Path -like $pattern) {
+            return $true
+        }
+
+        foreach ($segment in $segments) {
+            if ($segment -like $pattern) {
+                return $true
+            }
+        }
+    }
+
+    return $false
 }
 
 function Get-NodeValue {
@@ -256,6 +315,7 @@ function Write-IssueLine {
         [object]$Issue
     )
 
+    $lineText = Format-IssueLine -Issue $Issue
     Write-Host -NoNewline '    - '
     Write-Host -NoNewline $Issue.Short -ForegroundColor $issueColor
     if ($Issue.Message) {
@@ -263,51 +323,72 @@ function Write-IssueLine {
     } else {
         Write-Host ''
     }
+
+    Add-OutputLine -Line $lineText
 }
 
-$scenarioResults = @{}
-$totalFilesProcessed = 0
+$outputLines = New-Object System.Collections.Generic.List[string]
 
-$files = Get-ChildItem -Path $resolvedPath -Recurse -File | Where-Object {
-    ($_.Name -like $processModelPattern -or $_.Name -like $channelPattern -or $_.Name -like $mappingPattern) -and $_.Extension -eq "" 
+function Add-OutputLine {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Line
+    )
+
+    $outputLines.Add($Line)
 }
 
-foreach ($file in $files) {
-    $totalFilesProcessed += 1
-    $filePath = $file.FullName
-    $scenarioInfo = Get-ScenarioInfo -FilePath $filePath -RootPath $resolvedPath
+function Format-IssueLine {
+    param (
+        [Parameter(Mandatory = $true)]
+        [object]$Issue
+    )
 
-    if (-not $scenarioResults.ContainsKey($scenarioInfo.Name)) {
-        $scenarioResults[$scenarioInfo.Name] = [ordered]@{
-            Name = $scenarioInfo.Name
-            Path = $scenarioInfo.Path
+    if ($Issue.Message) {
+        return "    - $($Issue.Short) $($Issue.Message)"
+    }
+
+    return "    - $($Issue.Short)"
+}
+
+function Add-ScenarioResult {
+    param (
+        [Parameter(Mandatory = $true)]
+        [object]$ScenarioInfo,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FileName,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory = $true)]
+        [xml]$XmlContent
+    )
+
+    if (-not $script:scenarioResults.ContainsKey($ScenarioInfo.Name)) {
+        $script:scenarioResults[$ScenarioInfo.Name] = [ordered]@{
+            Name = $ScenarioInfo.Name
+            Path = $ScenarioInfo.Path
             ProcessModels = @()
             Channels = @()
             Mappings = @()
         }
     }
 
-    try {
-        $xmlContent = Get-XmlDocument -FilePath $filePath
-    } catch {
-        Write-Warning "Error processing file: $($filePath)"
-        Write-Warning $($_.Exception.Message)
-        continue
-    }
+    $descriptionTokens = Get-DescriptionTokens -XmlDocument $XmlContent
 
-    $descriptionTokens = Get-DescriptionTokens -XmlDocument $xmlContent
-
-    if ($file.Name -like $processModelPattern) {
-        $businessKeysCount = ($xmlContent.SelectNodes($businessKeysXPath) | Measure-Object).Count
-        $processModelName = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.name
+    if ($FileName -like $script:processModelPattern) {
+        $businessKeysCount = ($XmlContent.SelectNodes($script:businessKeysXPath) | Measure-Object).Count
+        $processModelName = Get-NodeValue -XmlDocument $XmlContent -XPath $script:processModelXPaths.name
 
         $issues = New-Object System.Collections.Generic.List[object]
 
-        $isDurable = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.isDurable
-        $manualRestart = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.manualRestart
-        $isPersistent = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.isPersistent
-        $redeployPolicy = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.redeployPolicy
-        $volatilePolicy = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.volatilePolicy
+        $isDurable = Get-NodeValue -XmlDocument $XmlContent -XPath $script:processModelXPaths.isDurable
+        $manualRestart = Get-NodeValue -XmlDocument $XmlContent -XPath $script:processModelXPaths.manualRestart
+        $isPersistent = Get-NodeValue -XmlDocument $XmlContent -XPath $script:processModelXPaths.isPersistent
+        $redeployPolicy = Get-NodeValue -XmlDocument $XmlContent -XPath $script:processModelXPaths.redeployPolicy
+        $volatilePolicy = Get-NodeValue -XmlDocument $XmlContent -XPath $script:processModelXPaths.volatilePolicy
 
         $processModeCode = if ($isPersistent -eq 'true') {
             'p'
@@ -353,19 +434,19 @@ foreach ($file in $files) {
             }
         }
 
-		if ($isDurable -ne 'N/A') {
-			$signalCode = if ($isDurable -eq 'true') { 'p' } else { 't' }
-			if ((Test-CategoryEnabled -Category 'SI') -and $signalCode -ne 'p') {
-				$hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'SI' -Value $signalCode
-				$signalLabel = if ($signalCode -eq 'p') { 'persistent' } else { 'transient' }
-				if (-not $hasException) {
-					$issues.Add((New-ValidationIssue -Category 'SI' -Code $signalCode -Message "Signal subscription is $($signalLabel) (expected persistent)."))
-				} elseif ($ShowExceptions) {
-					$issues.Add((New-ValidationIssue -Category 'SI' -Code $signalCode -Message 'Exception configured.'))
-				}
-			}
-		}
-		
+        if ($isDurable -ne 'N/A') {
+            $signalCode = if ($isDurable -eq 'true') { 'p' } else { 't' }
+            if ((Test-CategoryEnabled -Category 'SI') -and $signalCode -ne 'p') {
+                $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'SI' -Value $signalCode
+                $signalLabel = if ($signalCode -eq 'p') { 'persistent' } else { 'transient' }
+                if (-not $hasException) {
+                    $issues.Add((New-ValidationIssue -Category 'SI' -Code $signalCode -Message "Signal subscription is $($signalLabel) (expected persistent)."))
+                } elseif ($ShowExceptions) {
+                    $issues.Add((New-ValidationIssue -Category 'SI' -Code $signalCode -Message 'Exception configured.'))
+                }
+            }
+        }
+
         if ((Test-CategoryEnabled -Category 'BK') -and $businessKeysCount -gt $MaxBusinessKeyCount) {
             $exceptionLimit = Get-BusinessKeyExceptionLimit -Tokens $descriptionTokens
             $hasException = $null -ne $exceptionLimit -and $businessKeysCount -le $exceptionLimit
@@ -377,19 +458,19 @@ foreach ($file in $files) {
         }
 
         if ($issues.Count -gt 0) {
-            $scenarioResults[$scenarioInfo.Name].ProcessModels += [PSCustomObject]@{
+            $script:scenarioResults[$ScenarioInfo.Name].ProcessModels += [PSCustomObject]@{
                 Name = $processModelName
-                Path = $filePath
+                Path = $FilePath
                 Issues = $issues
             }
         }
 
-        continue
+        return
     }
 
-    if ($file.Name -like $channelPattern) {
-        $channelName = Get-NodeValue -XmlDocument $xmlContent -XPath '/*[1]/name'
-        $numberOfInstances = Get-NodeValue -XmlDocument $xmlContent -XPath '/*[1]/numberOfInstances'
+    if ($FileName -like $script:channelPattern) {
+        $channelName = Get-NodeValue -XmlDocument $XmlContent -XPath '/*[1]/name'
+        $numberOfInstances = Get-NodeValue -XmlDocument $XmlContent -XPath '/*[1]/numberOfInstances'
         $strategyCode = if ($numberOfInstances -eq '1') { 's' } else { 'p' }
 
         if ((Test-CategoryEnabled -Category 'ST') -and $strategyCode -ne 'p') {
@@ -403,20 +484,20 @@ foreach ($file in $files) {
             }
 
             if ($issueList.Count -gt 0) {
-                $scenarioResults[$scenarioInfo.Name].Channels += [PSCustomObject]@{
+                $script:scenarioResults[$ScenarioInfo.Name].Channels += [PSCustomObject]@{
                     Name = $channelName
-                    Path = $filePath
+                    Path = $FilePath
                     Issues = $issueList
                 }
             }
         }
 
-        continue
+        return
     }
 
-    if ($file.Name -like $mappingPattern) {
-        $mappingName = Get-NodeValue -XmlDocument $xmlContent -XPath '/emds.mapping.proc.MappingScript/name'
-        $parallelExecution = Get-NodeValue -XmlDocument $xmlContent -XPath '/emds.mapping.proc.MappingScript/parallelExecution'
+    if ($FileName -like $script:mappingPattern) {
+        $mappingName = Get-NodeValue -XmlDocument $XmlContent -XPath '/emds.mapping.proc.MappingScript/name'
+        $parallelExecution = Get-NodeValue -XmlDocument $XmlContent -XPath '/emds.mapping.proc.MappingScript/parallelExecution'
         $strategyCode = if ($parallelExecution -eq 'true') { 'p' } else { 's' }
 
         if ((Test-CategoryEnabled -Category 'ST') -and $strategyCode -ne 'p') {
@@ -430,13 +511,106 @@ foreach ($file in $files) {
             }
 
             if ($issueList.Count -gt 0) {
-                $scenarioResults[$scenarioInfo.Name].Mappings += [PSCustomObject]@{
+                $script:scenarioResults[$ScenarioInfo.Name].Mappings += [PSCustomObject]@{
                     Name = $mappingName
-                    Path = $filePath
+                    Path = $FilePath
                     Issues = $issueList
                 }
             }
         }
+    }
+}
+
+$scenarioResults = @{}
+$totalFilesProcessed = 0
+
+$files = Get-ChildItem -Path $resolvedPath -Recurse -File | Where-Object {
+    ($_.Name -like $processModelPattern -or $_.Name -like $channelPattern -or $_.Name -like $mappingPattern) -and $_.Extension -eq "" -and (Test-PathMatchesFilter -Path $_.FullName -Filters $Filter)
+}
+
+$pscFiles = @()
+if ($IncludePsc) {
+    $pscFiles = Get-ChildItem -Path $resolvedPath -Recurse -Filter '*.psc' -File | Where-Object {
+        Test-PathMatchesFilter -Path $_.FullName -Filters $Filter
+    }
+}
+
+foreach ($file in $files) {
+    $filePath = $file.FullName
+    $scenarioInfo = Get-ScenarioInfo -FilePath $filePath -RootPath $resolvedPath
+
+    try {
+        $xmlContent = Get-XmlDocument -FilePath $filePath
+    } catch {
+        Write-Warning "Error processing file: $($filePath)"
+        Write-Warning $($_.Exception.Message)
+        continue
+    }
+
+    $totalFilesProcessed += 1
+    Add-ScenarioResult -ScenarioInfo $scenarioInfo -FileName $file.Name -FilePath $filePath -XmlContent $xmlContent
+}
+
+foreach ($pscFile in $pscFiles) {
+    $scenarioInfo = [PSCustomObject]@{
+        Name = [System.IO.Path]::GetFileNameWithoutExtension($pscFile.Name)
+        Path = $pscFile.FullName
+    }
+
+    try {
+        $zipArchive = [System.IO.Compression.ZipFile]::OpenRead($pscFile.FullName)
+    } catch {
+        Write-Warning "Error opening PSC archive: $($pscFile.FullName)"
+        Write-Warning $($_.Exception.Message)
+        continue
+    }
+
+    try {
+        foreach ($entry in $zipArchive.Entries) {
+            $entryName = [System.IO.Path]::GetFileName($entry.FullName)
+            if (-not $entryName) {
+                continue
+            }
+
+            if (-not ($entryName -like $processModelPattern -or $entryName -like $channelPattern -or $entryName -like $mappingPattern)) {
+                continue
+            }
+
+            $entryPath = Join-Path -Path $pscFile.FullName -ChildPath $entry.FullName
+            if (-not (Test-PathMatchesFilter -Path $entryPath -Filters $Filter)) {
+                continue
+            }
+
+            $entryContent = $null
+            $entryStream = $entry.Open()
+            try {
+                $reader = New-Object System.IO.StreamReader($entryStream)
+                try {
+                    $entryContent = $reader.ReadToEnd()
+                } finally {
+                    $reader.Dispose()
+                }
+            } finally {
+                $entryStream.Dispose()
+            }
+
+            if (-not $entryContent) {
+                Write-Warning "Entry '$($entry.FullName)' in archive '$($pscFile.Name)' is empty or unreadable."
+                continue
+            }
+
+            try {
+                [xml]$xmlContent = $entryContent
+            } catch {
+                Write-Warning "Entry '$($entry.FullName)' in archive '$($pscFile.Name)' is not valid XML: $($_.Exception.Message)"
+                continue
+            }
+
+            $totalFilesProcessed += 1
+            Add-ScenarioResult -ScenarioInfo $scenarioInfo -FileName $entryName -FilePath $entryPath -XmlContent $xmlContent
+        }
+    } finally {
+        $zipArchive.Dispose()
     }
 }
 
@@ -446,17 +620,22 @@ $scenariosWithIssues = $scenarioResults.Values | Where-Object {
 
 if (-not $scenariosWithIssues) {
     Write-Output 'No incorrect configurations found.'
+    Add-OutputLine -Line 'No incorrect configurations found.'
 } else {
-    Write-Output "XML Analysis Results (Incorrect Configurations):`n"
+    Write-Output "Scenario Validation Results (Incorrect Configurations):`n"
+    Add-OutputLine -Line 'Scenario Validation Results (Incorrect Configurations):'
+    Add-OutputLine -Line ''
 
     foreach ($scenario in $scenariosWithIssues | Sort-Object Name) {
         Write-Host -NoNewline $scenario.Name -ForegroundColor $scenarioColor
         Write-Host " [$($scenario.Path)]"
+        Add-OutputLine -Line "$($scenario.Name) [$($scenario.Path)]"
 
         foreach ($processModel in $scenario.ProcessModels) {
             $displayName = if ($processModel.Name -and $processModel.Name -ne 'N/A') { $processModel.Name } else { '(unnamed process model)' }
             Write-Host -NoNewline '  Process Model: '
             Write-Host $displayName -ForegroundColor $processModelColor
+            Add-OutputLine -Line "  Process Model: $($displayName)"
             foreach ($issue in $processModel.Issues) {
                 Write-IssueLine -Issue $issue
             }
@@ -466,6 +645,7 @@ if (-not $scenariosWithIssues) {
             $channelDisplay = if ($channel.Name -and $channel.Name -ne 'N/A') { $channel.Name } else { '(unnamed channel)' }
             Write-Host -NoNewline '  Channel: '
             Write-Host $channelDisplay -ForegroundColor $channelColor
+            Add-OutputLine -Line "  Channel: $($channelDisplay)"
             foreach ($issue in $channel.Issues) {
                 Write-IssueLine -Issue $issue
             }
@@ -475,13 +655,47 @@ if (-not $scenariosWithIssues) {
             $mappingDisplay = if ($mapping.Name -and $mapping.Name -ne 'N/A') { $mapping.Name } else { '(unnamed mapping)' }
             Write-Host -NoNewline '  Mapping: '
             Write-Host $mappingDisplay -ForegroundColor $mappingColor
+            Add-OutputLine -Line "  Mapping: $($mappingDisplay)"
             foreach ($issue in $mapping.Issues) {
                 Write-IssueLine -Issue $issue
             }
         }
 
         Write-Output ''
+        Add-OutputLine -Line ''
     }
 }
 
 Write-Output "Total number of files processed: $($totalFilesProcessed)"
+Add-OutputLine -Line "Total number of files processed: $($totalFilesProcessed)"
+
+if ($PSBoundParameters.ContainsKey('Output') -and -not [string]::IsNullOrWhiteSpace($Output)) {
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $outputFilePath = $null
+
+    if (Test-Path -Path $Output) {
+        $outputItem = Get-Item -Path $Output
+        if ($outputItem.PSIsContainer) {
+            $outputFilePath = Join-Path -Path $Output -ChildPath "Validate-Scenarios_$timestamp.txt"
+        } else {
+            $outputFilePath = $Output
+        }
+    } else {
+        $extension = [System.IO.Path]::GetExtension($Output)
+        if ([string]::IsNullOrWhiteSpace($extension)) {
+            New-Item -Path $Output -ItemType Directory -Force | Out-Null
+            $outputFilePath = Join-Path -Path $Output -ChildPath "Validate-Scenarios_$timestamp.txt"
+        } else {
+            $parentPath = Split-Path -Path $Output -Parent
+            if ($parentPath -and -not (Test-Path -Path $parentPath)) {
+                New-Item -Path $parentPath -ItemType Directory -Force | Out-Null
+            }
+            $outputFilePath = $Output
+        }
+    }
+
+    if ($outputFilePath) {
+        $outputLines | Out-File -FilePath $outputFilePath -Encoding utf8
+        Write-Host "Results written to '$($outputFilePath)'" -ForegroundColor Cyan
+    }
+}
