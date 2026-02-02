@@ -178,6 +178,14 @@ function Test-PathMatchesFilter {
     }
 
     $segments = $Path -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $segmentCandidates = New-Object System.Collections.Generic.List[string]
+    foreach ($segment in $segments) {
+        $segmentCandidates.Add($segment)
+        $baseName = [System.IO.Path]::GetFileNameWithoutExtension($segment)
+        if ($baseName -and $baseName -ne $segment) {
+            $segmentCandidates.Add($baseName)
+        }
+    }
     foreach ($pattern in $Filters) {
         if ([string]::IsNullOrWhiteSpace($pattern)) {
             continue
@@ -187,7 +195,7 @@ function Test-PathMatchesFilter {
             return $true
         }
 
-        foreach ($segment in $segments) {
+        foreach ($segment in $segmentCandidates) {
             if ($segment -like $pattern) {
                 return $true
             }
