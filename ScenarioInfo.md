@@ -15,7 +15,7 @@ This file summarizes the Orchestra scenario folder layout and highlights the con
 
 ## PSC file
 
-A `.psc` file is a zipped scenario folder (the folder contents, not the folder itself). When requested, `Validate-Scenarios` opens `.psc` archives and validates the same `ProcessModell_*`, `Channel_*`, and `MessageMapping_*` entries contained inside.
+A `.psc` file is a zipped scenario folder (the folder contents, not the folder itself). When requested, `Validate-Scenarios` opens `.psc` archives and validates the same `ProcessModell_*`, `Channel_*`, and `MessageMapping_*` entries contained inside, skipping entries that include file extensions (such as `.prop`).
 
 ## Process model files (`ProcessModell_*`)
 

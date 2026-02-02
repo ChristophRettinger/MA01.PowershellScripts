@@ -573,6 +573,10 @@ foreach ($pscFile in $pscFiles) {
                 continue
             }
 
+            if (-not [string]::IsNullOrWhiteSpace([System.IO.Path]::GetExtension($entryName))) {
+                continue
+            }
+
             if (-not ($entryName -like $processModelPattern -or $entryName -like $channelPattern -or $entryName -like $mappingPattern)) {
                 continue
             }
