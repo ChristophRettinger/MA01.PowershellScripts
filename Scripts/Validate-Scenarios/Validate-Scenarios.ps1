@@ -176,8 +176,8 @@ foreach ($file in $files) {
     }
 
     if ($file.Name -like $channelPattern) {
-        $channelName = Get-NodeValue -XmlDocument $xmlContent -XPath '/emds.epi.impl.adapter.http.outbound.HttpOutboundGeneralChannel/name'
-        $numberOfInstances = Get-NodeValue -XmlDocument $xmlContent -XPath '/emds.epi.impl.adapter.http.outbound.HttpOutboundGeneralChannel/numberOfInstances'
+        $channelName = Get-NodeValue -XmlDocument $xmlContent -XPath '/*[1]/name'
+        $numberOfInstances = Get-NodeValue -XmlDocument $xmlContent -XPath '/*[1]/numberOfInstances'
 
         if ($numberOfInstances -eq '1') {
             $scenarioResults[$scenarioInfo.Name].Channels += [PSCustomObject]@{
