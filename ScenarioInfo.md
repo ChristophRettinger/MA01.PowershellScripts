@@ -2,7 +2,7 @@
 
 ## Overview
 
-This file summarizes the Orchestra scenario folder layout and highlights the configuration values that the `Validate-Scenarios` script inspects. Scenario folders are organized by scenario name and contain XML configuration artifacts without file extensions. The script can optionally filter validations to specific category codes (for example: ST, PM).
+This file summarizes the Orchestra scenario folder layout and highlights the configuration values that the `Validate-Scenarios` script inspects. Scenario folders are organized by scenario name and contain XML configuration artifacts without file extensions. The script can optionally filter validations to specific category codes (for example: ST, PM), apply wildcard filters to folders or files, and inspect `.psc` archives when requested.
 
 ## Scenario root layout
 
@@ -15,7 +15,7 @@ This file summarizes the Orchestra scenario folder layout and highlights the con
 
 ## PSC file
 
-A `.psc` file is a zipped scenario folder (the folder contents, not the folder itself).
+A `.psc` file is a zipped scenario folder (the folder contents, not the folder itself). When requested, `Validate-Scenarios` opens `.psc` archives and validates the same `ProcessModell_*`, `Channel_*`, and `MessageMapping_*` entries contained inside.
 
 ## Process model files (`ProcessModell_*`)
 
