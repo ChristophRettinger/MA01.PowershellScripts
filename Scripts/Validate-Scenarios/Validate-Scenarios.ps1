@@ -22,6 +22,10 @@
     When set, includes entries that match a configured exception code in the
     output list with an "exception configured" note.
 
+.PARAMETER ErrorCategories
+    Optional list of validation categories to check (for example: ST, PM). When
+    omitted, all categories are validated.
+
 .EXAMPLE
     .\Validate-Scenarios.ps1 -Path "D:\Scenarios" -MaxBusinessKeyCount 8
 #>
@@ -34,7 +38,10 @@ param (
     [int]$MaxBusinessKeyCount = 6,
 
     [Parameter(Mandatory = $false)]
-    [switch]$ShowExceptions
+    [switch]$ShowExceptions,
+
+    [Parameter(Mandatory = $false)]
+    [string[]]$ErrorCategories
 )
 
 $resolvedPath = (Resolve-Path -Path $Path).Path
@@ -58,6 +65,26 @@ $scenarioColor = 'Cyan'
 $processModelColor = 'Green'
 $mappingColor = 'Magenta'
 $channelColor = 'Yellow'
+$issueColor = 'Red'
+
+$allCategories = @('PM','RS','MR','SI','BK','ST')
+$categorySet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+if ($PSBoundParameters.ContainsKey('ErrorCategories') -and $ErrorCategories) {
+    foreach ($entry in $ErrorCategories) {
+        if ([string]::IsNullOrWhiteSpace($entry)) { continue }
+        foreach ($token in ($entry -split '[,;]')) {
+            $trimmed = $token.Trim()
+            if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+                $null = $categorySet.Add($trimmed.ToUpperInvariant())
+            }
+        }
+    }
+}
+if ($categorySet.Count -eq 0) {
+    foreach ($cat in $allCategories) {
+        $null = $categorySet.Add($cat)
+    }
+}
 
 function Get-ScenarioInfo {
     param (
@@ -186,6 +213,48 @@ function Get-BusinessKeyExceptionLimit {
     return ($limits | Measure-Object -Maximum).Maximum
 }
 
+function Test-CategoryEnabled {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Category
+    )
+
+    return $categorySet.Contains($Category)
+}
+
+function New-ValidationIssue {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Category,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Code,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+
+    return [PSCustomObject]@{
+        Short = "$Category:$($Code)"
+        Message = $Message
+    }
+}
+
+function Write-IssueLine {
+    param (
+        [Parameter(Mandatory = $true)]
+        [object]$Issue
+    )
+
+    Write-Host -NoNewline '    - '
+    Write-Host -NoNewline $Issue.Short -ForegroundColor $issueColor
+    if ($Issue.Message) {
+        Write-Host " $($Issue.Message)"
+    } else {
+        Write-Host ''
+    }
+}
+
 $scenarioResults = @{}
 $totalFilesProcessed = 0
 
@@ -222,7 +291,7 @@ foreach ($file in $files) {
         $businessKeysCount = ($xmlContent.SelectNodes($businessKeysXPath) | Measure-Object).Count
         $processModelName = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.name
 
-        $issues = New-Object System.Collections.Generic.List[string]
+        $issues = New-Object System.Collections.Generic.List[object]
 
         $isDurable = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.isDurable
         $manualRestart = Get-NodeValue -XmlDocument $xmlContent -XPath $processModelXPaths.manualRestart
@@ -237,52 +306,61 @@ foreach ($file in $files) {
         } else {
             'v'
         }
-        if ($processModeCode -ne 'vr') {
+        if ((Test-CategoryEnabled -Category 'PM') -and $processModeCode -ne 'vr') {
             $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'PM' -Value $processModeCode
+            $processModeLabel = switch ($processModeCode) {
+                'p' { 'persistent' }
+                'v' { 'volatile' }
+                'vr' { 'volatile with recovery' }
+                default { $processModeCode }
+            }
             if (-not $hasException) {
-                $issues.Add("PM:$($processModeCode)")
+                $issues.Add((New-ValidationIssue -Category 'PM' -Code $processModeCode -Message "Process mode is $($processModeLabel) (expected volatile with recovery)."))
             } elseif ($ShowExceptions) {
-                $issues.Add("PM:$($processModeCode) (exception configured)")
+                $issues.Add((New-ValidationIssue -Category 'PM' -Code $processModeCode -Message 'Exception configured.'))
             }
         }
 
         $redeployCode = if ($redeployPolicy -eq '1') { 'r' } else { 'a' }
-        if ($redeployCode -ne 'r') {
+        if ((Test-CategoryEnabled -Category 'RS') -and $redeployCode -ne 'r') {
             $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'RS' -Value $redeployCode
+            $redeployLabel = if ($redeployCode -eq 'r') { 'restart' } else { 'abort' }
             if (-not $hasException) {
-                $issues.Add("RS:$($redeployCode)")
+                $issues.Add((New-ValidationIssue -Category 'RS' -Code $redeployCode -Message "Redeploy policy is $($redeployLabel) (expected restart)."))
             } elseif ($ShowExceptions) {
-                $issues.Add("RS:$($redeployCode) (exception configured)")
+                $issues.Add((New-ValidationIssue -Category 'RS' -Code $redeployCode -Message 'Exception configured.'))
             }
         }
 
         $manualRestartCode = if ($manualRestart -eq 'true') { 'e' } else { 'd' }
-        if ($manualRestartCode -ne 'e') {
+        if ((Test-CategoryEnabled -Category 'MR') -and $manualRestartCode -ne 'e') {
             $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'MR' -Value $manualRestartCode
+            $manualRestartLabel = if ($manualRestartCode -eq 'e') { 'enabled' } else { 'disabled' }
             if (-not $hasException) {
-                $issues.Add("MR:$($manualRestartCode)")
+                $issues.Add((New-ValidationIssue -Category 'MR' -Code $manualRestartCode -Message "Manual restart is $($manualRestartLabel) (expected enabled)."))
             } elseif ($ShowExceptions) {
-                $issues.Add("MR:$($manualRestartCode) (exception configured)")
+                $issues.Add((New-ValidationIssue -Category 'MR' -Code $manualRestartCode -Message 'Exception configured.'))
             }
         }
 
         $signalCode = if ($isDurable -eq 'true') { 'p' } else { 't' }
-        if ($signalCode -ne 'p') {
+        if ((Test-CategoryEnabled -Category 'SI') -and $signalCode -ne 'p') {
             $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'SI' -Value $signalCode
+            $signalLabel = if ($signalCode -eq 'p') { 'persistent' } else { 'transient' }
             if (-not $hasException) {
-                $issues.Add("SI:$($signalCode)")
+                $issues.Add((New-ValidationIssue -Category 'SI' -Code $signalCode -Message "Signal subscription is $($signalLabel) (expected persistent)."))
             } elseif ($ShowExceptions) {
-                $issues.Add("SI:$($signalCode) (exception configured)")
+                $issues.Add((New-ValidationIssue -Category 'SI' -Code $signalCode -Message 'Exception configured.'))
             }
         }
 
-        if ($businessKeysCount -gt $MaxBusinessKeyCount) {
+        if ((Test-CategoryEnabled -Category 'BK') -and $businessKeysCount -gt $MaxBusinessKeyCount) {
             $exceptionLimit = Get-BusinessKeyExceptionLimit -Tokens $descriptionTokens
             $hasException = $null -ne $exceptionLimit -and $businessKeysCount -le $exceptionLimit
             if (-not $hasException) {
-                $issues.Add("BK:$($businessKeysCount) (max $($MaxBusinessKeyCount))")
+                $issues.Add((New-ValidationIssue -Category 'BK' -Code $businessKeysCount -Message "Business key count is $($businessKeysCount) (max $($MaxBusinessKeyCount))."))
             } elseif ($ShowExceptions) {
-                $issues.Add("BK:$($businessKeysCount) (exception BK:$($exceptionLimit))")
+                $issues.Add((New-ValidationIssue -Category 'BK' -Code $businessKeysCount -Message "Business key count is $($businessKeysCount) (exception BK:$($exceptionLimit))."))
             }
         }
 
@@ -302,13 +380,14 @@ foreach ($file in $files) {
         $numberOfInstances = Get-NodeValue -XmlDocument $xmlContent -XPath '/*[1]/numberOfInstances'
         $strategyCode = if ($numberOfInstances -eq '1') { 's' } else { 'p' }
 
-        if ($strategyCode -ne 'p') {
+        if ((Test-CategoryEnabled -Category 'ST') -and $strategyCode -ne 'p') {
             $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'ST' -Value $strategyCode
-            $issueList = New-Object System.Collections.Generic.List[string]
+            $issueList = New-Object System.Collections.Generic.List[object]
+            $strategyLabel = if ($strategyCode -eq 'p') { 'parallel' } else { 'sequential' }
             if (-not $hasException) {
-                $issueList.Add("ST:$($strategyCode)")
+                $issueList.Add((New-ValidationIssue -Category 'ST' -Code $strategyCode -Message "Resource usage strategy is $($strategyLabel) (expected parallel)."))
             } elseif ($ShowExceptions) {
-                $issueList.Add("ST:$($strategyCode) (exception configured)")
+                $issueList.Add((New-ValidationIssue -Category 'ST' -Code $strategyCode -Message 'Exception configured.'))
             }
 
             if ($issueList.Count -gt 0) {
@@ -328,13 +407,14 @@ foreach ($file in $files) {
         $parallelExecution = Get-NodeValue -XmlDocument $xmlContent -XPath '/emds.mapping.proc.MappingScript/parallelExecution'
         $strategyCode = if ($parallelExecution -eq 'true') { 'p' } else { 's' }
 
-        if ($strategyCode -ne 'p') {
+        if ((Test-CategoryEnabled -Category 'ST') -and $strategyCode -ne 'p') {
             $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'ST' -Value $strategyCode
-            $issueList = New-Object System.Collections.Generic.List[string]
+            $issueList = New-Object System.Collections.Generic.List[object]
+            $strategyLabel = if ($strategyCode -eq 'p') { 'parallel' } else { 'sequential' }
             if (-not $hasException) {
-                $issueList.Add("ST:$($strategyCode)")
+                $issueList.Add((New-ValidationIssue -Category 'ST' -Code $strategyCode -Message "Resource usage strategy is $($strategyLabel) (expected parallel)."))
             } elseif ($ShowExceptions) {
-                $issueList.Add("ST:$($strategyCode) (exception configured)")
+                $issueList.Add((New-ValidationIssue -Category 'ST' -Code $strategyCode -Message 'Exception configured.'))
             }
 
             if ($issueList.Count -gt 0) {
@@ -366,7 +446,7 @@ if (-not $scenariosWithIssues) {
             Write-Host -NoNewline '  Process Model: '
             Write-Host $displayName -ForegroundColor $processModelColor
             foreach ($issue in $processModel.Issues) {
-                Write-Host "    - $($issue)"
+                Write-IssueLine -Issue $issue
             }
         }
 
@@ -375,7 +455,7 @@ if (-not $scenariosWithIssues) {
             Write-Host -NoNewline '  Channel: '
             Write-Host $channelDisplay -ForegroundColor $channelColor
             foreach ($issue in $channel.Issues) {
-                Write-Host "    - $($issue)"
+                Write-IssueLine -Issue $issue
             }
         }
 
@@ -384,7 +464,7 @@ if (-not $scenariosWithIssues) {
             Write-Host -NoNewline '  Mapping: '
             Write-Host $mappingDisplay -ForegroundColor $mappingColor
             foreach ($issue in $mapping.Issues) {
-                Write-Host "    - $($issue)"
+                Write-IssueLine -Issue $issue
             }
         }
 
