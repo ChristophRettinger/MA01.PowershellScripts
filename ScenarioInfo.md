@@ -109,6 +109,17 @@ Mappings are flagged when `parallelExecution` is not `true`.
     - `p`: Parallel execution
     - `s`: Sequential execution
 
+Default naming expectations (documented even when not validated):
+
+- **PM**: `vr` (volatile with recovery)
+- **RS**: `r` (restart after redeployment)
+- **MR**: `e` (manual restart enabled)
+- **SC**: `p` (parallel unbounded scheduling)
+- **BK**: `#` (up to the script-configured maximum)
+- **SI**: `p` (persistent subscription)
+- **CH/ST**: `p` (parallel execution)
+- **MM/ST**: `p` (parallel execution)
+
 ## Description-based exceptions
 
 Validation reads optional codes embedded in the `description` text (for example: `PM:v; RS:a; SC:p75`). Codes can appear anywhere in the description and multiple codes can be listed. Only codes that align to validation checks are considered; unsupported codes such as `SC` are ignored.
