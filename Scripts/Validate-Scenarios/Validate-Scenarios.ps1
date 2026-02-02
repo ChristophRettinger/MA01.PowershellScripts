@@ -38,12 +38,17 @@
     omitted, all categories are validated.
 
 .PARAMETER Filter
-    Optional wildcard filter (or list of filters) that must match file or folder
-    names within the target directory. Use "all" (default) to include every
-    file and folder.
+    Optional wildcard filter (or list of filters) applied to scenario folder names
+    in Folder mode or PSC file names in PSC mode. Use "all" (default) to include
+    every folder or PSC file.
+
+.PARAMETER Mode
+    Specifies whether to validate scenario folders ("Folder") or only PSC archives
+    in the target directory ("PSC"). Defaults to Folder.
 
 .PARAMETER IncludePsc
-    When set, also inspects .psc archive files found beneath the target directory.
+    When set in Folder mode, also inspects .psc archive files found beneath the
+    selected scenario folders.
 
 .PARAMETER Output
     Optional file path or folder path used to write a text copy of the validation
@@ -68,6 +73,10 @@ param (
 
     [Parameter(Mandatory = $false)]
     [string[]]$Filter = @('all'),
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('Folder', 'PSC')]
+    [string]$Mode = 'Folder',
 
     [Parameter(Mandatory = $false)]
     [switch]$IncludePsc,
@@ -118,7 +127,13 @@ if ($categorySet.Count -eq 0) {
     }
 }
 
-if ($IncludePsc) {
+$filterProvided = $PSBoundParameters.ContainsKey('Filter')
+$effectivePscFilters = $Filter
+if ($Mode -eq 'PSC' -and (-not $filterProvided -or ($Filter.Count -eq 1 -and $Filter[0].Equals('all', [System.StringComparison]::OrdinalIgnoreCase)))) {
+    $effectivePscFilters = @('*.psc')
+}
+
+if ($IncludePsc -or $Mode -eq 'PSC') {
     Add-Type -AssemblyName 'System.IO.Compression.FileSystem' | Out-Null
 }
 
@@ -164,10 +179,10 @@ function Get-XmlDocument {
     return [xml](Get-Content -Path $FilePath -Raw)
 }
 
-function Test-PathMatchesFilter {
+function Test-NameMatchesFilter {
     param (
         [Parameter(Mandatory = $true)]
-        [string]$Path,
+        [string]$Name,
 
         [Parameter(Mandatory = $true)]
         [string[]]$Filters
@@ -177,28 +192,18 @@ function Test-PathMatchesFilter {
         return $true
     }
 
-    $segments = $Path -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-    $segmentCandidates = New-Object System.Collections.Generic.List[string]
-    foreach ($segment in $segments) {
-        $segmentCandidates.Add($segment)
-        $baseName = [System.IO.Path]::GetFileNameWithoutExtension($segment)
-        if ($baseName -and $baseName -ne $segment) {
-            $segmentCandidates.Add($baseName)
-        }
-    }
     foreach ($pattern in $Filters) {
         if ([string]::IsNullOrWhiteSpace($pattern)) {
             continue
         }
 
-        if ($Path -like $pattern) {
+        if ($Name -like $pattern) {
             return $true
         }
 
-        foreach ($segment in $segmentCandidates) {
-            if ($segment -like $pattern) {
-                return $true
-            }
+        $baseName = [System.IO.Path]::GetFileNameWithoutExtension($Name)
+        if ($baseName -and $baseName -ne $Name -and $baseName -like $pattern) {
+            return $true
         }
     }
 
@@ -533,20 +538,43 @@ function Add-ScenarioResult {
 $scenarioResults = @{}
 $totalFilesProcessed = 0
 
-$files = Get-ChildItem -Path $resolvedPath -Recurse -File | Where-Object {
-    ($_.Name -like $processModelPattern -or $_.Name -like $channelPattern -or $_.Name -like $mappingPattern) -and $_.Extension -eq "" -and (Test-PathMatchesFilter -Path $_.FullName -Filters $Filter)
-}
-
+$scenarioRootPath = $resolvedPath
+$files = @()
 $pscFiles = @()
-if ($IncludePsc) {
-    $pscFiles = Get-ChildItem -Path $resolvedPath -Recurse -Filter '*.psc' -File | Where-Object {
-        Test-PathMatchesFilter -Path $_.FullName -Filters $Filter
+
+if ($Mode -eq 'Folder') {
+    $scenarioFolders = Get-ChildItem -Path $resolvedPath -Directory -ErrorAction SilentlyContinue
+    if (-not $scenarioFolders) {
+        $scenarioFolders = @(Get-Item -Path $resolvedPath)
+        $scenarioRootPath = Split-Path -Path $resolvedPath -Parent
+        if (-not $scenarioRootPath) {
+            $scenarioRootPath = $resolvedPath
+        }
+    } else {
+        $scenarioFolders = $scenarioFolders | Where-Object {
+            Test-NameMatchesFilter -Name $_.Name -Filters $Filter
+        }
+    }
+
+    $scenarioFolderPaths = $scenarioFolders | ForEach-Object { $_.FullName }
+    if ($scenarioFolderPaths) {
+        $files = Get-ChildItem -Path $scenarioFolderPaths -Recurse -File | Where-Object {
+            ($_.Name -like $processModelPattern -or $_.Name -like $channelPattern -or $_.Name -like $mappingPattern) -and $_.Extension -eq ""
+        }
+    }
+
+    if ($IncludePsc -and $scenarioFolderPaths) {
+        $pscFiles = Get-ChildItem -Path $scenarioFolderPaths -Recurse -Filter '*.psc' -File
+    }
+} else {
+    $pscFiles = Get-ChildItem -Path $resolvedPath -File -Filter '*.psc' | Where-Object {
+        Test-NameMatchesFilter -Name $_.Name -Filters $effectivePscFilters
     }
 }
 
 foreach ($file in $files) {
     $filePath = $file.FullName
-    $scenarioInfo = Get-ScenarioInfo -FilePath $filePath -RootPath $resolvedPath
+    $scenarioInfo = Get-ScenarioInfo -FilePath $filePath -RootPath $scenarioRootPath
 
     try {
         $xmlContent = Get-XmlDocument -FilePath $filePath
@@ -590,9 +618,6 @@ foreach ($pscFile in $pscFiles) {
             }
 
             $entryPath = Join-Path -Path $pscFile.FullName -ChildPath $entry.FullName
-            if (-not (Test-PathMatchesFilter -Path $entryPath -Filters $Filter)) {
-                continue
-            }
 
             $entryContent = $null
             $entryStream = $entry.Open()
