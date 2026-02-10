@@ -16,11 +16,16 @@
 
 .PARAMETER StartDate
     The inclusive start date used to filter PROCESSINGTIME (DB) and the time field in Elasticsearch.
-    If omitted, defaults to the current day start (00:00:00) and the script will
-    automatically use the end of the same day (23:59:59.999) as EndDate.
+    If omitted, defaults to the current day start (00:00:00). If neither EndDate
+    nor Timespan is supplied, EndDate defaults to StartDate plus 15 minutes.
 
 .PARAMETER EndDate
     The optional inclusive end date used to filter PROCESSINGTIME (DB) and the time field in Elasticsearch.
+
+.PARAMETER Timespan
+    Optional duration used to derive EndDate from StartDate. Accepts either a
+    TimeSpan value (for example `00:30:00`) or a numeric value interpreted as
+    minutes. Cannot be used together with EndDate.
 
 .PARAMETER DatabaseServerConnection
     SQL Server host and port in the format 'host,port'. Defaults to
@@ -79,6 +84,9 @@ param(
     [datetime]$EndDate,
 
     [Parameter(Mandatory=$false)]
+    [object]$Timespan,
+
+    [Parameter(Mandatory=$false)]
     [string]$DatabaseServerConnection = 'MedarchivSql.wienkav.at,1433',
 
     [Parameter(Mandatory=$false)]
@@ -116,14 +124,49 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
 }
 . $sharedHelpersPath
 
-# Determine effective StartDate/EndDate defaults for whole current day if omitted
+function Resolve-EffectiveTimespan {
+    param(
+        [object]$Value,
+        [int]$DefaultMinutes = 15
+    )
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace("$Value")) {
+        return [timespan]::FromMinutes($DefaultMinutes)
+    }
+
+    if ($Value -is [timespan]) { return $Value }
+    if ($Value -is [byte] -or $Value -is [int16] -or $Value -is [int32] -or $Value -is [int64] -or $Value -is [single] -or $Value -is [double] -or $Value -is [decimal]) {
+        return [timespan]::FromMinutes([double]$Value)
+    }
+
+    $minutes = 0.0
+    $textValue = "$Value".Trim()
+    if ([double]::TryParse($textValue, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$minutes)) {
+        return [timespan]::FromMinutes($minutes)
+    }
+
+    $parsedTimeSpan = [timespan]::Zero
+    if ([timespan]::TryParse($textValue, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedTimeSpan)) {
+        return $parsedTimeSpan
+    }
+
+    throw "Invalid Timespan '$Value'. Provide a number (minutes) or a TimeSpan value."
+}
+
+# Determine effective StartDate/EndDate defaults
 $includeEndDate = $PSBoundParameters.ContainsKey('EndDate')
+if ($includeEndDate -and $PSBoundParameters.ContainsKey('Timespan')) {
+    throw 'Specify either EndDate or Timespan, not both.'
+}
+
 if (-not $PSBoundParameters.ContainsKey('StartDate')) {
     $StartDate = [datetime]::Today
-    if (-not $includeEndDate) {
-        $EndDate = $StartDate.Date.AddDays(1).AddMilliseconds(-1)
-        $includeEndDate = $true
-    }
+}
+
+if (-not $includeEndDate) {
+    $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
+    $EndDate = $StartDate.Add($effectiveTimespan)
+    $includeEndDate = $true
 }
 
 # Load mappings

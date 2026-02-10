@@ -25,11 +25,17 @@
 
 .PARAMETER StartDate
     Optional inclusive start date for the time range filter applied to the specified
-    `ElasticTimeField`.
+    `ElasticTimeField`. If omitted and EndDate is also omitted, the script derives
+    StartDate from Timespan (or 15 minutes by default) as EndDate minus Timespan.
 
 .PARAMETER EndDate
     Optional inclusive end date for the time range filter applied to the specified
     `ElasticTimeField`.
+
+.PARAMETER Timespan
+    Optional duration used to derive EndDate from StartDate. Accepts either a
+    TimeSpan value (for example `00:30:00`) or a numeric value interpreted as
+    minutes. Cannot be used together with EndDate.
 
 .PARAMETER ElasticTimeField
     Name of the Elasticsearch time field to filter and sort by. Defaults to
@@ -88,6 +94,9 @@ param(
     [datetime]$EndDate,
 
     [Parameter(Mandatory=$false)]
+    [object]$Timespan,
+
+    [Parameter(Mandatory=$false)]
     [string]$ElasticTimeField = '@timestamp',
 
     [Parameter(Mandatory=$false)]
@@ -127,6 +136,52 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
     throw "Shared Elastic helper not found at '$sharedHelpersPath'."
 }
 . $sharedHelpersPath
+
+
+function Resolve-EffectiveTimespan {
+    param(
+        [object]$Value,
+        [int]$DefaultMinutes = 15
+    )
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace("$Value")) {
+        return [timespan]::FromMinutes($DefaultMinutes)
+    }
+
+    if ($Value -is [timespan]) { return $Value }
+    if ($Value -is [byte] -or $Value -is [int16] -or $Value -is [int32] -or $Value -is [int64] -or $Value -is [single] -or $Value -is [double] -or $Value -is [decimal]) {
+        return [timespan]::FromMinutes([double]$Value)
+    }
+
+    $minutes = 0.0
+    $textValue = "$Value".Trim()
+    if ([double]::TryParse($textValue, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$minutes)) {
+        return [timespan]::FromMinutes($minutes)
+    }
+
+    $parsedTimeSpan = [timespan]::Zero
+    if ([timespan]::TryParse($textValue, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedTimeSpan)) {
+        return $parsedTimeSpan
+    }
+
+    throw "Invalid Timespan '$Value'. Provide a number (minutes) or a TimeSpan value."
+}
+
+$includeEndDate = $PSBoundParameters.ContainsKey('EndDate')
+if ($includeEndDate -and $PSBoundParameters.ContainsKey('Timespan')) {
+    throw 'Specify either EndDate or Timespan, not both.'
+}
+
+if (-not $includeEndDate) {
+    $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
+    if ($StartDate) {
+        $EndDate = $StartDate.Add($effectiveTimespan)
+    } else {
+        $EndDate = Get-Date
+        $StartDate = $EndDate.Subtract($effectiveTimespan)
+    }
+    $includeEndDate = $true
+}
 
 if (-not $PIDISH -and -not $CASENO) {
     Write-Error 'Provide either PIDISH or CASENO to search for patient information.'
@@ -300,7 +355,7 @@ $mustNot = @(
     @{ term = @{ 'BK.SUBFL_drop' = $true } }
 )
 
-if ($StartDate -or $EndDate) {
+if ($StartDate -or $includeEndDate) {
     $rangeEntry = @{ range = @{ ($ElasticTimeField) = @{} } }
     if ($StartDate) { $rangeEntry.range[$ElasticTimeField].gte = $StartDate.ToString('o') }
     if ($EndDate) { $rangeEntry.range[$ElasticTimeField].lte = $EndDate.ToString('o') }

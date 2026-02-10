@@ -27,3 +27,8 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 
 - **SubflElasticInfo.md** - Overview of Subscription Flow (SUBFL) terminology plus how SUBFL scenarios log to Elasticsearch, including the specific fields and filters leveraged by the SUBFL-related scripts in this repository.
 - **ScenarioInfo.md** - Reference for Orchestra scenario folder structure, including expected file naming patterns and scenario-related configuration notes drawn from the scripts.
+
+## Shared date-range behavior
+
+Scripts that expose `StartDate`/`EndDate` now also support `Timespan` as an alternative to `EndDate`. `Timespan` accepts either a number (minutes) or a PowerShell `TimeSpan` value. When `EndDate` and `Timespan` are both omitted, a default window of 15 minutes is used from `StartDate`.
+
