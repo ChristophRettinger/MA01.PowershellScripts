@@ -29,10 +29,16 @@
 
 .PARAMETER StartDate
     Inclusive start date for @timestamp filtering (local time). Defaults to today's
-    start if omitted. If EndDate is not supplied, it is set to the end of StartDate's day.
+    start if omitted. If neither EndDate nor Timespan is supplied, EndDate
+    defaults to StartDate plus 15 minutes.
 
 .PARAMETER EndDate
     Inclusive end date for @timestamp filtering (local time).
+
+.PARAMETER Timespan
+    Optional duration used to derive EndDate from StartDate. Accepts either a
+    TimeSpan value (for example `00:30:00`) or a numeric value interpreted as
+    minutes. Cannot be used together with EndDate.
 
 .PARAMETER ScenarioName
     Name (or substring) of the scenario to filter in Elasticsearch.
@@ -87,6 +93,9 @@ param(
     [Parameter(Mandatory=$false)]
     [datetime]$EndDate,
 
+    [Parameter(Mandatory=$false)]
+    [object]$Timespan,
+
     [Parameter(Mandatory=$true)]
     [string]$ScenarioName,
 
@@ -130,14 +139,49 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
 }
 . $sharedHelpersPath
 
-# Determine default StartDate/EndDate (full day if StartDate omitted)
+function Resolve-EffectiveTimespan {
+    param(
+        [object]$Value,
+        [int]$DefaultMinutes = 15
+    )
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace("$Value")) {
+        return [timespan]::FromMinutes($DefaultMinutes)
+    }
+
+    if ($Value -is [timespan]) { return $Value }
+    if ($Value -is [byte] -or $Value -is [int16] -or $Value -is [int32] -or $Value -is [int64] -or $Value -is [single] -or $Value -is [double] -or $Value -is [decimal]) {
+        return [timespan]::FromMinutes([double]$Value)
+    }
+
+    $minutes = 0.0
+    $textValue = "$Value".Trim()
+    if ([double]::TryParse($textValue, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$minutes)) {
+        return [timespan]::FromMinutes($minutes)
+    }
+
+    $parsedTimeSpan = [timespan]::Zero
+    if ([timespan]::TryParse($textValue, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedTimeSpan)) {
+        return $parsedTimeSpan
+    }
+
+    throw "Invalid Timespan '$Value'. Provide a number (minutes) or a TimeSpan value."
+}
+
+# Determine default StartDate/EndDate
 $includeEnd = $PSBoundParameters.ContainsKey('EndDate')
+if ($includeEnd -and $PSBoundParameters.ContainsKey('Timespan')) {
+    throw 'Specify either EndDate or Timespan, not both.'
+}
+
 if (-not $PSBoundParameters.ContainsKey('StartDate')) {
     $StartDate = [datetime]::Today
-    if (-not $includeEnd) {
-        $EndDate = $StartDate.Date.AddDays(1).AddMilliseconds(-1)
-        $includeEnd = $true
-    }
+}
+
+if (-not $includeEnd) {
+    $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
+    $EndDate = $StartDate.Add($effectiveTimespan)
+    $includeEnd = $true
 }
 
 # Build request headers with API key

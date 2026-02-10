@@ -134,3 +134,8 @@ Supported exception codes:
 - **BK** Business key maximum (`#`)
 
 When the script finds a non-default configuration that matches an exception code, it suppresses the entry by default and can optionally list it with an "exception configured" note.
+
+## Script parameter conventions
+- Repository scripts that expose both `StartDate` and `EndDate` can also accept `Timespan` as an alternative end-bound.
+- `Timespan` accepts numeric minute values and PowerShell `TimeSpan` values.
+- If neither `EndDate` nor `Timespan` is supplied, a default 15-minute window is used from `StartDate`.

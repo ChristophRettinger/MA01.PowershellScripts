@@ -39,3 +39,8 @@ This note consolidates how Subscription Flow (SUBFL) scenarios log to Elasticsea
 - **BK._MOVENO**: movement identifier within a case, following the pattern `\d{5}`.
 
 The different CASENO values (`BK._CASENO`, `BK._CASENO_BC`, and `BK._CASENO_ISH`) represent the same underlying case, and most logs include all of them. When producing script output, display `BK._PID` as **AID** and `BK._PID_ISH` as **Fallzahl** to keep patient and case identifiers aligned.
+
+## Date-range parameters in SUBFL scripts
+- SUBFL scripts in this repository that expose `StartDate`/`EndDate` also accept `Timespan` as an alternative to `EndDate`.
+- `Timespan` supports either a numeric minute value or a PowerShell `TimeSpan` input.
+- If neither `EndDate` nor `Timespan` is provided, the scripts apply a default range of 15 minutes from `StartDate`.
