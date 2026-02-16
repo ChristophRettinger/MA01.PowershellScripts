@@ -193,7 +193,10 @@ function Get-EdgeRows {
         [xml]$XmlDocument,
 
         [Parameter(Mandatory = $true)]
-        [string]$SourceElementId
+        [string]$SourceElementId,
+
+        [Parameter(Mandatory = $false)]
+        [string]$SourceReferenceId
     )
 
     if ([string]::IsNullOrWhiteSpace($SourceElementId)) {
@@ -201,14 +204,37 @@ function Get-EdgeRows {
     }
 
     $rows = New-Object System.Collections.Generic.List[object]
-    foreach ($edge in $XmlDocument.SelectNodes('/ProcessModel/edges/*|/ProcessModel/processEdges/*|/ProcessModel/sequenceFlows/*')) {
-        if ((Get-EdgeSourceId -Edge $edge) -ne $SourceElementId) {
+    foreach ($edge in $XmlDocument.SelectNodes('/ProcessModel/edges/*|/ProcessModel/processEdges/*|/ProcessModel/sequenceFlows/*|/ProcessModel/EdgeSequence')) {
+        $isMatchingSource = (Get-EdgeSourceId -Edge $edge) -eq $SourceElementId
+
+        if (-not $isMatchingSource -and -not [string]::IsNullOrWhiteSpace($SourceReferenceId)) {
+            $firstArNodeRef = ''
+            $firstArNode = $edge.SelectSingleNode('m__arNode/*[1]')
+            if ($firstArNode -and $firstArNode.Attributes) {
+                $referenceAttribute = $firstArNode.Attributes['reference']
+                if ($referenceAttribute) {
+                    $firstArNodeRef = [string]$referenceAttribute.Value
+                }
+            }
+
+            if ($firstArNodeRef -eq $SourceReferenceId) {
+                $isMatchingSource = $true
+            }
+        }
+
+        if (-not $isMatchingSource) {
             continue
         }
 
         $condition = Get-ChildNodeInnerText -ParentNode $edge -ChildNodeName 'conditionExpr/expression'
         if ([string]::IsNullOrWhiteSpace($condition)) {
+            $condition = Get-ChildNodeInnerText -ParentNode $edge -ChildNodeName 'expression/expression'
+        }
+        if ([string]::IsNullOrWhiteSpace($condition)) {
             $condition = Get-ChildNodeInnerText -ParentNode $edge -ChildNodeName 'expression'
+        }
+        if ([string]::IsNullOrWhiteSpace($condition)) {
+            $condition = 'else'
         }
 
         $displayName = Get-ChildNodeInnerText -ParentNode $edge -ChildNodeName 'edgeLabel'
@@ -481,6 +507,10 @@ function New-ProcessModelOverview {
         }
 
         $elementType = Get-ElementTypeName -Node $element
+        $elementReferenceId = ''
+        if ($element.Attributes -and $element.Attributes['id']) {
+            $elementReferenceId = [string]$element.Attributes['id'].Value
+        }
         $inAssignments = @(Get-AssignmentList -Parent $element -AssignmentNodeName 'inAssignments')
         $outAssignments = @(Get-AssignmentList -Parent $element -AssignmentNodeName 'outAssignments')
         $shapeParameters = @()
@@ -496,7 +526,7 @@ function New-ProcessModelOverview {
         $detailRows = @(Get-ElementDetailRows -InAssignments $inAssignments -OutAssignments $outAssignments -Parameters $shapeParameters)
         $outgoingEdges = @()
         if ($elementType -like '*Gateway*') {
-            $outgoingEdges = @(Get-EdgeRows -XmlDocument $xml -SourceElementId ([string]$idNode.InnerText))
+            $outgoingEdges = @(Get-EdgeRows -XmlDocument $xml -SourceElementId ([string]$idNode.InnerText) -SourceReferenceId $elementReferenceId)
         }
 
         $elements.Add([PSCustomObject]@{
