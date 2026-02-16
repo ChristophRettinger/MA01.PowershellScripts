@@ -18,6 +18,7 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 - **Get-PatientInfo.ps1** - Retrieves SUBFL HCM messages for a patient or case and exports structured JSON.
 - **Validate-Scenarios.ps1** - Validates scenario folders or PSC archives, with optional mode selection, validation-category filtering, folder/PSC name filtering, and optional text report output (ignores non-XML PSC entries).
 - **Transfer-OperationData.ps1** - Transfers DataStore rows into OrchestraOperationData using resumable batches.
+- **Create-ProcessModelOverview.ps1** - Parses ProcessModell_* XML files and creates Markdown overviews for model metadata, variables, business keys, and element-level parameter/assignment usage.
 
 ## Shared utilities
 
@@ -31,4 +32,3 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 ## Shared date-range behavior
 
 Scripts that expose `StartDate`/`EndDate` now also support `Timespan` as an alternative to `EndDate`. `Timespan` accepts either a number (minutes) or a PowerShell `TimeSpan` value. When `EndDate` and `Timespan` are both omitted, a default window of 15 minutes is used from `StartDate`.
-
