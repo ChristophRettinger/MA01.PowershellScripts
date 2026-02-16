@@ -18,7 +18,7 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 - **Get-PatientInfo.ps1** - Retrieves SUBFL HCM messages for a patient or case and exports structured JSON.
 - **Validate-Scenarios.ps1** - Validates scenario folders or PSC archives, with optional mode selection, validation-category filtering, folder/PSC name filtering, and optional text report output (ignores non-XML PSC entries).
 - **Transfer-OperationData.ps1** - Transfers DataStore rows into OrchestraOperationData using resumable batches.
-- **Create-ProcessModelOverview.ps1** - Parses ProcessModell_* XML files and creates Markdown overviews for model metadata, variables, business keys, and merged element detail rows (`Name`, `Type`, `Usage`, `Input Expression`, `Output Expression`) plus gateway outgoing edge conditions, writing reports to the script-local `Output` folder by default.
+- **Create-ProcessModelOverview.ps1** - Parses ProcessModell_* XML files and creates Markdown overviews for model metadata, variables, business keys, merged element detail rows (`Name`, `Type`, `Usage`, `Input Expression`, `Output Expression`), and gateway outgoing edge conditions (including EdgeSequence-based paths and else branches), writing reports to the script-local `Output` folder by default.
 
 ## Shared utilities
 
