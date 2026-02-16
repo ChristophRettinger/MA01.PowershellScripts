@@ -12,7 +12,8 @@
     writes one Markdown file per input model.
 
     The script prints a colored summary to the console and always writes a Markdown
-    report file next to the source process model (or into -OutputFolder if specified).
+    report file into an `Output` folder next to this script (or into -OutputFolder
+    if specified).
 
 .PARAMETER ProcessModelPath
     Path to a single process model XML file.
@@ -21,7 +22,8 @@
     Path to a folder that contains process model files.
 
 .PARAMETER OutputFolder
-    Optional output folder for generated Markdown files.
+    Optional output folder for generated Markdown files. Defaults to an `Output`
+    folder next to this script.
 
 .PARAMETER CheckUnusedVariables
     Adds an "Unused Variables" section by checking declared process properties that are
@@ -62,20 +64,11 @@ function Get-TypeText {
         return ''
     }
 
-    $parts = @()
-    if ($TypeNode.Attributes['class']) {
-        $parts += $TypeNode.Attributes['class'].Value
-    }
-
     if (-not [string]::IsNullOrWhiteSpace($TypeNode.InnerText)) {
-        $parts += $TypeNode.InnerText.Trim()
+        return $TypeNode.InnerText.Trim()
     }
 
-    if ($parts.Count -eq 0) {
-        return ''
-    }
-
-    return ($parts -join ':')
+    return ''
 }
 
 function ConvertTo-MarkdownTable {
@@ -89,7 +82,7 @@ function ConvertTo-MarkdownTable {
     )
 
     if (-not $Rows -or $Rows.Count -eq 0) {
-        return "_none_"
+        return @()
     }
 
     $headerLine = '| ' + ($Headers -join ' | ') + ' |'
@@ -324,8 +317,13 @@ function New-ProcessModelOverview {
 
     $variables = New-Object System.Collections.Generic.List[object]
     foreach ($property in $xml.SelectNodes('/ProcessModel/properties/Property')) {
+        $name = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'name'
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            continue
+        }
+
         $variables.Add([PSCustomObject]@{
-            Name = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'name'
+            Name = $name
             Type = Get-TypeText -TypeNode ($property.SelectSingleNode('type'))
             Usage = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'usagePattern'
         })
@@ -382,7 +380,7 @@ function New-ProcessModelOverview {
 
     $baseOutputFolder = $ReportFolderPath
     if ([string]::IsNullOrWhiteSpace($baseOutputFolder)) {
-        $baseOutputFolder = Split-Path -Path $FilePath -Parent
+        $baseOutputFolder = Join-Path -Path $PSScriptRoot -ChildPath 'Output'
     }
 
     if (-not (Test-Path -LiteralPath $baseOutputFolder)) {
@@ -407,42 +405,66 @@ function New-ProcessModelOverview {
     $md.Add("- Scenario ID: " + $processScenarioId)
     $md.Add("- Revision: " + $revisionNumber)
     $md.Add('')
-    $md.Add('### ProcessModel Input/Output Parameters')
-    $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage','RequiredOnInput') -Rows $processParameters))
-    $md.Add('')
-    $md.Add('## Used Variables')
-    $md.Add('')
-    $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage') -Rows $variables))
-    $md.Add('')
-    $md.Add('## Used BusinessKeys')
-    $md.Add('')
-    $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage') -Rows $businessKeys))
-    $md.Add('')
-    $md.Add('## Used Elements')
-    $md.Add('')
+    if ($processParameters.Count -gt 0) {
+        $md.Add('### ProcessModel Input/Output Parameters')
+        $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage','RequiredOnInput') -Rows $processParameters))
+        $md.Add('')
+    }
+    if ($variables.Count -gt 0) {
+        $md.Add('## Used Variables')
+        $md.Add('')
+        $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage') -Rows $variables))
+        $md.Add('')
+    }
+
+    if ($businessKeys.Count -gt 0) {
+        $md.Add('## Used BusinessKeys')
+        $md.Add('')
+        $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage') -Rows $businessKeys))
+        $md.Add('')
+    }
+
+    if ($elements.Count -gt 0) {
+        $md.Add('## Used Elements')
+        $md.Add('')
+    }
 
     foreach ($element in $elements) {
-        $md.Add("### $($element.Name)")
-        $md.Add('')
-        $md.Add("- Element ID: " + $element.ElementId)
-        $md.Add("- Type: " + $element.Type)
-        $md.Add('')
-        $md.Add('#### Input Assignments')
-        $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Target','Expression','Language') -Rows $element.InAssignments))
-        $md.Add('')
-        $md.Add('#### Output Assignments')
-        $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Target','Expression','Language') -Rows $element.OutAssignments))
-        $md.Add('')
-        $md.Add('#### Shape Parameters')
-        $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage','RequiredOnInput') -Rows $element.Parameters))
+        $displayName = $element.Name
+        if ([string]::IsNullOrWhiteSpace($displayName)) {
+            $displayName = '(unnamed element)'
+        }
+
+        $md.Add("### $($displayName) [Type: $($element.Type), ElementID: $($element.ElementId)]")
+
+        if ($element.InAssignments.Count -gt 0) {
+            $md.Add('')
+            $md.Add('#### Input Assignments')
+            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Target','Expression','Language') -Rows $element.InAssignments))
+        }
+
+        if ($element.OutAssignments.Count -gt 0) {
+            $md.Add('')
+            $md.Add('#### Output Assignments')
+            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Target','Expression','Language') -Rows $element.OutAssignments))
+        }
+
+        if ($element.Parameters.Count -gt 0) {
+            $md.Add('')
+            $md.Add('#### Shape Parameters')
+            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage','RequiredOnInput') -Rows $element.Parameters))
+        }
+
         $md.Add('')
     }
 
     if ($IncludeUnusedVariables) {
-        $md.Add('## Unused Variables')
-        $md.Add('')
-        $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage') -Rows $unusedVariables))
-        $md.Add('')
+        if ($unusedVariables.Count -gt 0) {
+            $md.Add('## Unused Variables')
+            $md.Add('')
+            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage') -Rows $unusedVariables))
+            $md.Add('')
+        }
     }
 
     Set-Content -Path $outputPath -Value $md -Encoding UTF8
