@@ -227,14 +227,17 @@ function Get-EdgeRows {
 
 function Get-ElementDetailRows {
     param(
-        [Parameter(Mandatory = $true)]
-        [object[]]$InAssignments,
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyCollection()]
+        [object[]]$InAssignments = @(),
 
-        [Parameter(Mandatory = $true)]
-        [object[]]$OutAssignments,
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyCollection()]
+        [object[]]$OutAssignments = @(),
 
-        [Parameter(Mandatory = $true)]
-        [object[]]$Parameters
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyCollection()]
+        [object[]]$Parameters = @()
     )
 
     $rows = New-Object System.Collections.Generic.List[object]
@@ -465,12 +468,18 @@ function New-ProcessModelOverview {
             $shapeParameters = @(Get-PropertyRows -Parent $element.SelectSingleNode('trigger') -ContainerName 'parameters')
         }
 
+        $detailRows = @(Get-ElementDetailRows -InAssignments $inAssignments -OutAssignments $outAssignments -Parameters $shapeParameters)
+        $outgoingEdges = @()
+        if ($elementType -like '*Gateway*') {
+            $outgoingEdges = @(Get-EdgeRows -XmlDocument $xml -SourceElementId ([string]$idNode.InnerText))
+        }
+
         $elements.Add([PSCustomObject]@{
             ElementId = [string]$idNode.InnerText
             Name = Get-ChildNodeInnerText -ParentNode $element -ChildNodeName 'displayText'
             Type = $elementType
-            Details = @(Get-ElementDetailRows -InAssignments $inAssignments -OutAssignments $outAssignments -Parameters $shapeParameters)
-            OutgoingEdges = if ($elementType -like '*Gateway*') { @(Get-EdgeRows -XmlDocument $xml -SourceElementId ([string]$idNode.InnerText)) } else { @() }
+            Details = $detailRows
+            OutgoingEdges = $outgoingEdges
         })
     }
 
