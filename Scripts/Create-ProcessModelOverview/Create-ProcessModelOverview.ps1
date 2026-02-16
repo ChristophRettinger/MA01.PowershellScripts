@@ -490,9 +490,9 @@ if ($PSBoundParameters.ContainsKey('OutputFolder') -and -not [string]::IsNullOrW
     $resolvedOutputFolder = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputFolder)
 }
 
-$results = foreach ($file in $inputFiles) {
+$results = @(foreach ($file in $inputFiles) {
     New-ProcessModelOverview -FilePath $file -ReportFolderPath $resolvedOutputFolder -IncludeUnusedVariables:$CheckUnusedVariables
-}
+})
 
 Write-Host ''
 Write-Host "Finished. Created $($results.Count) overview file(s)." -ForegroundColor Green
