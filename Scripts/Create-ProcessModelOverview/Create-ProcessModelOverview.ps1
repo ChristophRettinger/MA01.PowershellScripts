@@ -138,9 +138,9 @@ function Get-AssignmentList {
     $rows = New-Object System.Collections.Generic.List[object]
     foreach ($assignment in $assignmentContainer.SelectNodes('Assignment')) {
         $rows.Add([PSCustomObject]@{
-            Target = [string]$assignment.targetPropertyName
-            Expression = [string]$assignment.sourceExpr.expression
-            Language = [string]$assignment.sourceExpr.implementingLanguage
+            Target = Get-ChildNodeInnerText -ParentNode $assignment -ChildNodeName 'targetPropertyName'
+            Expression = Get-ChildNodeInnerText -ParentNode $assignment -ChildNodeName 'sourceExpr/expression'
+            Language = Get-ChildNodeInnerText -ParentNode $assignment -ChildNodeName 'sourceExpr/implementingLanguage'
         })
     }
 
@@ -168,10 +168,10 @@ function Get-PropertyRows {
     $rows = New-Object System.Collections.Generic.List[object]
     foreach ($property in $container.SelectNodes('Property')) {
         $rows.Add([PSCustomObject]@{
-            Name = [string]$property.name
+            Name = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'name'
             Type = Get-TypeText -TypeNode $property.type
-            Usage = [string]$property.usagePattern
-            RequiredOnInput = [string]$property.requiredOnInput
+            Usage = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'usagePattern'
+            RequiredOnInput = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'requiredOnInput'
         })
     }
 
@@ -193,6 +193,27 @@ function Get-NodeInnerText {
     }
 
     return [string]$node.InnerText.Trim()
+}
+
+function Get-ChildNodeInnerText {
+    param(
+        [Parameter(Mandatory = $false)]
+        [System.Xml.XmlNode]$ParentNode,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ChildNodeName
+    )
+
+    if (-not $ParentNode) {
+        return ''
+    }
+
+    $childNode = $ParentNode.SelectSingleNode($ChildNodeName)
+    if (-not $childNode -or [string]::IsNullOrWhiteSpace($childNode.InnerText)) {
+        return ''
+    }
+
+    return [string]$childNode.InnerText.Trim()
 }
 
 function Get-ElementTypeName {
@@ -279,7 +300,7 @@ function New-ProcessModelOverview {
         throw "File '$($FilePath)' is not a ProcessModel XML."
     }
 
-    $processName = [string]$xml.ProcessModel.name
+    $processName = Get-NodeInnerText -XmlDocument $xml -XPath '/ProcessModel/name'
     if ([string]::IsNullOrWhiteSpace($processName)) {
         $processName = [System.IO.Path]::GetFileName($FilePath)
     }
@@ -290,13 +311,13 @@ function New-ProcessModelOverview {
 
     $processParameters = New-Object System.Collections.Generic.List[object]
     foreach ($property in $xml.SelectNodes('/ProcessModel/properties/Property')) {
-        $usage = [string]$property.usagePattern
+        $usage = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'usagePattern'
         if ($usage -in @('INPUT', 'OUTPUT', 'IN_OUT')) {
             $processParameters.Add([PSCustomObject]@{
-                Name = [string]$property.name
+                Name = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'name'
                 Type = Get-TypeText -TypeNode $property.type
                 Usage = $usage
-                RequiredOnInput = [string]$property.requiredOnInput
+                RequiredOnInput = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'requiredOnInput'
             })
         }
     }
@@ -304,18 +325,18 @@ function New-ProcessModelOverview {
     $variables = New-Object System.Collections.Generic.List[object]
     foreach ($property in $xml.SelectNodes('/ProcessModel/properties/Property')) {
         $variables.Add([PSCustomObject]@{
-            Name = [string]$property.name
+            Name = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'name'
             Type = Get-TypeText -TypeNode $property.type
-            Usage = [string]$property.usagePattern
+            Usage = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'usagePattern'
         })
     }
 
     $businessKeys = New-Object System.Collections.Generic.List[object]
     foreach ($key in $xml.SelectNodes('/ProcessModel/businessKeys/Property')) {
         $businessKeys.Add([PSCustomObject]@{
-            Name = [string]$key.name
+            Name = Get-ChildNodeInnerText -ParentNode $key -ChildNodeName 'name'
             Type = Get-TypeText -TypeNode $key.type
-            Usage = [string]$key.usagePattern
+            Usage = Get-ChildNodeInnerText -ParentNode $key -ChildNodeName 'usagePattern'
         })
     }
 
@@ -341,7 +362,7 @@ function New-ProcessModelOverview {
 
         $elements.Add([PSCustomObject]@{
             ElementId = [string]$idNode.InnerText
-            Name = [string]$element.displayText
+            Name = Get-ChildNodeInnerText -ParentNode $element -ChildNodeName 'displayText'
             Type = $elementType
             InAssignments = $inAssignments
             OutAssignments = $outAssignments
