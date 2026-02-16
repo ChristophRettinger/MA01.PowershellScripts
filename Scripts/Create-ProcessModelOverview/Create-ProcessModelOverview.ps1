@@ -346,16 +346,16 @@ function New-ProcessModelOverview {
         }
 
         $elementType = Get-ElementTypeName -Node $element
-        $inAssignments = Get-AssignmentList -Parent $element -AssignmentNodeName 'inAssignments'
-        $outAssignments = Get-AssignmentList -Parent $element -AssignmentNodeName 'outAssignments'
+        $inAssignments = @(Get-AssignmentList -Parent $element -AssignmentNodeName 'inAssignments')
+        $outAssignments = @(Get-AssignmentList -Parent $element -AssignmentNodeName 'outAssignments')
         $shapeParameters = @()
 
         if ($element.SelectSingleNode('parameters')) {
-            $shapeParameters = Get-PropertyRows -Parent $element -ContainerName 'parameters'
+            $shapeParameters = @(Get-PropertyRows -Parent $element -ContainerName 'parameters')
         } elseif ($element.SelectSingleNode('properties')) {
-            $shapeParameters = Get-PropertyRows -Parent $element -ContainerName 'properties'
+            $shapeParameters = @(Get-PropertyRows -Parent $element -ContainerName 'properties')
         } elseif ($element.SelectSingleNode('trigger/parameters')) {
-            $shapeParameters = Get-PropertyRows -Parent $element.SelectSingleNode('trigger') -ContainerName 'parameters'
+            $shapeParameters = @(Get-PropertyRows -Parent $element.SelectSingleNode('trigger') -ContainerName 'parameters')
         }
 
         $elements.Add([PSCustomObject]@{
