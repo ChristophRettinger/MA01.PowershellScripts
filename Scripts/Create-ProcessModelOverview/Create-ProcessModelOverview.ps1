@@ -240,45 +240,70 @@ function Get-ElementDetailRows {
         [object[]]$Parameters = @()
     )
 
-    $rows = New-Object System.Collections.Generic.List[object]
+    $detailMap = [ordered]@{}
+
+    foreach ($parameter in $Parameters) {
+        if ([string]::IsNullOrWhiteSpace($parameter.Name)) {
+            continue
+        }
+
+        if (-not $detailMap.Contains($parameter.Name)) {
+            $detailMap[$parameter.Name] = [PSCustomObject]@{
+                Name = $parameter.Name
+                Type = $parameter.Type
+                Usage = $parameter.Usage
+                'Input Expression' = ''
+                'Output Expression' = ''
+            }
+            continue
+        }
+
+        if ([string]::IsNullOrWhiteSpace($detailMap[$parameter.Name].Type) -and -not [string]::IsNullOrWhiteSpace($parameter.Type)) {
+            $detailMap[$parameter.Name].Type = $parameter.Type
+        }
+
+        if ([string]::IsNullOrWhiteSpace($detailMap[$parameter.Name].Usage) -and -not [string]::IsNullOrWhiteSpace($parameter.Usage)) {
+            $detailMap[$parameter.Name].Usage = $parameter.Usage
+        }
+    }
 
     foreach ($assignment in $InAssignments) {
-        $rows.Add([PSCustomObject]@{
-            Category = 'Input Assignment'
-            Name = $assignment.Target
-            Expression = $assignment.Expression
-            Language = $assignment.Language
-            Type = ''
-            Usage = ''
-            RequiredOnInput = ''
-        })
+        if ([string]::IsNullOrWhiteSpace($assignment.Target)) {
+            continue
+        }
+
+        if (-not $detailMap.Contains($assignment.Target)) {
+            $detailMap[$assignment.Target] = [PSCustomObject]@{
+                Name = $assignment.Target
+                Type = ''
+                Usage = ''
+                'Input Expression' = ''
+                'Output Expression' = ''
+            }
+        }
+
+        $detailMap[$assignment.Target].'Input Expression' = $assignment.Expression
     }
 
     foreach ($assignment in $OutAssignments) {
-        $rows.Add([PSCustomObject]@{
-            Category = 'Output Assignment'
-            Name = $assignment.Target
-            Expression = $assignment.Expression
-            Language = $assignment.Language
-            Type = ''
-            Usage = ''
-            RequiredOnInput = ''
-        })
+        if ([string]::IsNullOrWhiteSpace($assignment.Target)) {
+            continue
+        }
+
+        if (-not $detailMap.Contains($assignment.Target)) {
+            $detailMap[$assignment.Target] = [PSCustomObject]@{
+                Name = $assignment.Target
+                Type = ''
+                Usage = ''
+                'Input Expression' = ''
+                'Output Expression' = ''
+            }
+        }
+
+        $detailMap[$assignment.Target].'Output Expression' = $assignment.Expression
     }
 
-    foreach ($parameter in $Parameters) {
-        $rows.Add([PSCustomObject]@{
-            Category = 'Parameter'
-            Name = $parameter.Name
-            Expression = ''
-            Language = ''
-            Type = $parameter.Type
-            Usage = $parameter.Usage
-            RequiredOnInput = $parameter.RequiredOnInput
-        })
-    }
-
-    return $rows
+    return [object[]]$detailMap.Values
 }
 
 function Get-NodeInnerText {
@@ -555,7 +580,7 @@ function New-ProcessModelOverview {
         if ($element.Details.Count -gt 0) {
             $md.Add('')
             $md.Add('#### Element Details')
-            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Category','Name','Expression','Language','Type','Usage','RequiredOnInput') -Rows $element.Details))
+            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage','Input Expression','Output Expression') -Rows $element.Details))
         }
 
         if ($element.OutgoingEdges.Count -gt 0) {

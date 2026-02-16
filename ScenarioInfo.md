@@ -52,7 +52,7 @@ Validation reads the following fields:
 - Overview reports default to `<script folder>/Output` unless `-OutputFolder` is supplied.
 - Type values in the overview output use the type name text only (for example `string`).
 - Element headings use compact `[Type, ElementID]` formatting.
-- Input assignments, output assignments, and parameters are merged into one per-element detail table.
+- Input assignments, output assignments, and parameters are merged into one per-element detail table with columns `Name`, `Type`, `Usage`, `Input Expression`, and `Output Expression`.
 - Assignment and parameter rows are normalized to arrays so single-row sections are handled consistently under strict mode.
 - Elements without assignments, parameters, or gateway edges are handled as empty collections so overview generation does not fail under strict mode.
 
