@@ -48,6 +48,9 @@ Validation reads the following fields:
 - `/ProcessModel/processObjects/*` including `inAssignments`, `outAssignments`, and shape-level `parameters`/`properties`/`trigger/parameters`.
 - Property and business key type metadata from optional child node `type`; missing type nodes are treated as empty values.
 - Element scripts and expressions (`script`, `sourceExpr/expression`, edge expressions, labels) to support optional unused-variable detection.
+- Overview reports default to `<script folder>/Output` unless `-OutputFolder` is supplied.
+- Type values in the overview output use the type name text only (for example `string`).
+- Element headings include type and element ID directly in the heading, and empty assignment/parameter sections are omitted.
 
 Scheduling shorthand (used in naming conventions):
 
