@@ -54,6 +54,7 @@ Validation reads the following fields:
 - Element headings use compact `[Type, ElementID]` formatting.
 - Input assignments, output assignments, and parameters are merged into one per-element detail table.
 - Assignment and parameter rows are normalized to arrays so single-row sections are handled consistently under strict mode.
+- Elements without assignments, parameters, or gateway edges are handled as empty collections so overview generation does not fail under strict mode.
 
 Scheduling shorthand (used in naming conventions):
 
