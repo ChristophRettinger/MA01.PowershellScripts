@@ -46,6 +46,7 @@ Validation reads the following fields:
 - `/ProcessModel/properties/Property` to list process variables and process-level INPUT/OUTPUT/IN_OUT parameters.
 - `/ProcessModel/businessKeys/Property` to list business keys and types.
 - `/ProcessModel/processObjects/*` including `inAssignments`, `outAssignments`, and shape-level `parameters`/`properties`/`trigger/parameters`.
+- Property and business key type metadata from optional child node `type`; missing type nodes are treated as empty values.
 - Element scripts and expressions (`script`, `sourceExpr/expression`, edge expressions, labels) to support optional unused-variable detection.
 
 Scheduling shorthand (used in naming conventions):
