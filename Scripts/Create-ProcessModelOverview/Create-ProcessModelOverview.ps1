@@ -5,7 +5,7 @@
 .DESCRIPTION
     Reads an Orchestra ProcessModel XML file and generates a structured overview that
     includes basic process model metadata, process input/output parameters, variables,
-    business keys, and a per-element breakdown of assignments and parameters.
+    business keys, and a per-element breakdown of merged assignments/parameters.
 
     You can pass a single process model file via -ProcessModelPath or a folder via
     -FolderPath. Folder mode scans for ProcessModell_* files (no extension) and
@@ -165,6 +165,113 @@ function Get-PropertyRows {
             Type = Get-TypeText -TypeNode ($property.SelectSingleNode('type'))
             Usage = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'usagePattern'
             RequiredOnInput = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'requiredOnInput'
+        })
+    }
+
+    return $rows
+}
+
+function Get-EdgeSourceId {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Xml.XmlNode]$Edge
+    )
+
+    foreach ($path in @('sourceObjectID', 'sourceObjectId', 'sourceElementId', 'sourceId', 'source')) {
+        $value = Get-ChildNodeInnerText -ParentNode $Edge -ChildNodeName $path
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value
+        }
+    }
+
+    return ''
+}
+
+function Get-EdgeRows {
+    param(
+        [Parameter(Mandatory = $true)]
+        [xml]$XmlDocument,
+
+        [Parameter(Mandatory = $true)]
+        [string]$SourceElementId
+    )
+
+    if ([string]::IsNullOrWhiteSpace($SourceElementId)) {
+        return @()
+    }
+
+    $rows = New-Object System.Collections.Generic.List[object]
+    foreach ($edge in $XmlDocument.SelectNodes('/ProcessModel/edges/*|/ProcessModel/processEdges/*|/ProcessModel/sequenceFlows/*')) {
+        if ((Get-EdgeSourceId -Edge $edge) -ne $SourceElementId) {
+            continue
+        }
+
+        $condition = Get-ChildNodeInnerText -ParentNode $edge -ChildNodeName 'conditionExpr/expression'
+        if ([string]::IsNullOrWhiteSpace($condition)) {
+            $condition = Get-ChildNodeInnerText -ParentNode $edge -ChildNodeName 'expression'
+        }
+
+        $displayName = Get-ChildNodeInnerText -ParentNode $edge -ChildNodeName 'edgeLabel'
+        if ([string]::IsNullOrWhiteSpace($displayName)) {
+            $displayName = Get-ChildNodeInnerText -ParentNode $edge -ChildNodeName 'displayText'
+        }
+
+        $rows.Add([PSCustomObject]@{
+            Condition = $condition
+            DisplayName = $displayName
+        })
+    }
+
+    return $rows
+}
+
+function Get-ElementDetailRows {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$InAssignments,
+
+        [Parameter(Mandatory = $true)]
+        [object[]]$OutAssignments,
+
+        [Parameter(Mandatory = $true)]
+        [object[]]$Parameters
+    )
+
+    $rows = New-Object System.Collections.Generic.List[object]
+
+    foreach ($assignment in $InAssignments) {
+        $rows.Add([PSCustomObject]@{
+            Category = 'Input Assignment'
+            Name = $assignment.Target
+            Expression = $assignment.Expression
+            Language = $assignment.Language
+            Type = ''
+            Usage = ''
+            RequiredOnInput = ''
+        })
+    }
+
+    foreach ($assignment in $OutAssignments) {
+        $rows.Add([PSCustomObject]@{
+            Category = 'Output Assignment'
+            Name = $assignment.Target
+            Expression = $assignment.Expression
+            Language = $assignment.Language
+            Type = ''
+            Usage = ''
+            RequiredOnInput = ''
+        })
+    }
+
+    foreach ($parameter in $Parameters) {
+        $rows.Add([PSCustomObject]@{
+            Category = 'Parameter'
+            Name = $parameter.Name
+            Expression = ''
+            Language = ''
+            Type = $parameter.Type
+            Usage = $parameter.Usage
+            RequiredOnInput = $parameter.RequiredOnInput
         })
     }
 
@@ -362,9 +469,8 @@ function New-ProcessModelOverview {
             ElementId = [string]$idNode.InnerText
             Name = Get-ChildNodeInnerText -ParentNode $element -ChildNodeName 'displayText'
             Type = $elementType
-            InAssignments = $inAssignments
-            OutAssignments = $outAssignments
-            Parameters = $shapeParameters
+            Details = @(Get-ElementDetailRows -InAssignments $inAssignments -OutAssignments $outAssignments -Parameters $shapeParameters)
+            OutgoingEdges = if ($elementType -like '*Gateway*') { @(Get-EdgeRows -XmlDocument $xml -SourceElementId ([string]$idNode.InnerText)) } else { @() }
         })
     }
 
@@ -435,24 +541,18 @@ function New-ProcessModelOverview {
             $displayName = '(unnamed element)'
         }
 
-        $md.Add("### $($displayName) [Type: $($element.Type), ElementID: $($element.ElementId)]")
+        $md.Add("### $($displayName) [$($element.Type), $($element.ElementId)]")
 
-        if ($element.InAssignments.Count -gt 0) {
+        if ($element.Details.Count -gt 0) {
             $md.Add('')
-            $md.Add('#### Input Assignments')
-            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Target','Expression','Language') -Rows $element.InAssignments))
+            $md.Add('#### Element Details')
+            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Category','Name','Expression','Language','Type','Usage','RequiredOnInput') -Rows $element.Details))
         }
 
-        if ($element.OutAssignments.Count -gt 0) {
+        if ($element.OutgoingEdges.Count -gt 0) {
             $md.Add('')
-            $md.Add('#### Output Assignments')
-            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Target','Expression','Language') -Rows $element.OutAssignments))
-        }
-
-        if ($element.Parameters.Count -gt 0) {
-            $md.Add('')
-            $md.Add('#### Shape Parameters')
-            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Name','Type','Usage','RequiredOnInput') -Rows $element.Parameters))
+            $md.Add('#### Outgoing Edge Conditions')
+            $md.AddRange([string[]](ConvertTo-MarkdownTable -Headers @('Condition','DisplayName') -Rows $element.OutgoingEdges))
         }
 
         $md.Add('')

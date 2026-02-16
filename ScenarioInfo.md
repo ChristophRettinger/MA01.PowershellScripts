@@ -46,11 +46,13 @@ Validation reads the following fields:
 - `/ProcessModel/properties/Property` to list process variables and process-level INPUT/OUTPUT/IN_OUT parameters.
 - `/ProcessModel/businessKeys/Property` to list business keys and types.
 - `/ProcessModel/processObjects/*` including `inAssignments`, `outAssignments`, and shape-level `parameters`/`properties`/`trigger/parameters`.
+- `/ProcessModel/edges/*`, `/ProcessModel/processEdges/*`, and `/ProcessModel/sequenceFlows/*` to list outgoing gateway edge conditions and optional edge display names.
 - Property and business key type metadata from optional child node `type`; missing type nodes are treated as empty values.
 - Element scripts and expressions (`script`, `sourceExpr/expression`, edge expressions, labels) to support optional unused-variable detection.
 - Overview reports default to `<script folder>/Output` unless `-OutputFolder` is supplied.
 - Type values in the overview output use the type name text only (for example `string`).
-- Element headings include type and element ID directly in the heading, and empty assignment/parameter sections are omitted.
+- Element headings use compact `[Type, ElementID]` formatting.
+- Input assignments, output assignments, and parameters are merged into one per-element detail table.
 - Assignment and parameter rows are normalized to arrays so single-row sections are handled consistently under strict mode.
 
 Scheduling shorthand (used in naming conventions):
