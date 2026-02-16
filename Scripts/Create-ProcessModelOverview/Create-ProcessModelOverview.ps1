@@ -169,7 +169,7 @@ function Get-PropertyRows {
     foreach ($property in $container.SelectNodes('Property')) {
         $rows.Add([PSCustomObject]@{
             Name = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'name'
-            Type = Get-TypeText -TypeNode $property.type
+            Type = Get-TypeText -TypeNode ($property.SelectSingleNode('type'))
             Usage = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'usagePattern'
             RequiredOnInput = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'requiredOnInput'
         })
@@ -315,7 +315,7 @@ function New-ProcessModelOverview {
         if ($usage -in @('INPUT', 'OUTPUT', 'IN_OUT')) {
             $processParameters.Add([PSCustomObject]@{
                 Name = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'name'
-                Type = Get-TypeText -TypeNode $property.type
+                Type = Get-TypeText -TypeNode ($property.SelectSingleNode('type'))
                 Usage = $usage
                 RequiredOnInput = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'requiredOnInput'
             })
@@ -326,7 +326,7 @@ function New-ProcessModelOverview {
     foreach ($property in $xml.SelectNodes('/ProcessModel/properties/Property')) {
         $variables.Add([PSCustomObject]@{
             Name = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'name'
-            Type = Get-TypeText -TypeNode $property.type
+            Type = Get-TypeText -TypeNode ($property.SelectSingleNode('type'))
             Usage = Get-ChildNodeInnerText -ParentNode $property -ChildNodeName 'usagePattern'
         })
     }
@@ -335,7 +335,7 @@ function New-ProcessModelOverview {
     foreach ($key in $xml.SelectNodes('/ProcessModel/businessKeys/Property')) {
         $businessKeys.Add([PSCustomObject]@{
             Name = Get-ChildNodeInnerText -ParentNode $key -ChildNodeName 'name'
-            Type = Get-TypeText -TypeNode $key.type
+            Type = Get-TypeText -TypeNode ($key.SelectSingleNode('type'))
             Usage = Get-ChildNodeInnerText -ParentNode $key -ChildNodeName 'usagePattern'
         })
     }
