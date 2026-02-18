@@ -8,7 +8,8 @@
     same configuration files. For every scenario (grouped by the top-level folder
     beneath the root path, or by PSC file name), the script checks process model
     settings, business key counts, channel concurrency, and mapping parallel
-    execution rules. Results are grouped by scenario name and printed with colored
+    execution rules. Sequential channels/mappings are allowed when all process models in the
+    scenario use sequential scheduling. Results are grouped by scenario name and printed with colored
     headings for the scenario, process models, channels, and mappings. Description
     tags in each XML document can include exception codes (for example: "PM:v; RS:a;
     SC:p75") to allow deviations from the default validation rules.
@@ -99,6 +100,9 @@ $processModelXPaths = [ordered]@{
     volatilePolicy = '/ProcessModel/volatilePoicy'
     manualRestart = '/ProcessModel/manualRestart'
     isFifo = '/ProcessModel/isFifo'
+    isGroupedFifo = '/ProcessModel/isGroupedFifo'
+    bestEffortLimit = '/ProcessModel/bestEffortLimit'
+    pipelineMode = '/ProcessModel/pipelineMode'
     name = '/ProcessModel/name'
 }
 
@@ -304,6 +308,51 @@ function Test-CategoryEnabled {
     return $categorySet.Contains($Category)
 }
 
+
+function Test-IsSequentialScenarioProcessModel {
+    param (
+        [Parameter(Mandatory = $true)]
+        [xml]$XmlDocument
+    )
+
+    $isFifo = Get-NodeValue -XmlDocument $XmlDocument -XPath $script:processModelXPaths.isFifo
+    $isGroupedFifo = Get-NodeValue -XmlDocument $XmlDocument -XPath $script:processModelXPaths.isGroupedFifo
+    $bestEffortLimit = Get-NodeValue -XmlDocument $XmlDocument -XPath $script:processModelXPaths.bestEffortLimit
+    $pipelineMode = Get-NodeValue -XmlDocument $XmlDocument -XPath $script:processModelXPaths.pipelineMode
+
+    return (
+        $isFifo -eq 'true' -and
+        $isGroupedFifo -eq 'false' -and
+        $bestEffortLimit -eq '0' -and
+        $pipelineMode -eq 'false'
+    )
+}
+
+function Remove-SequentialStrategyIssues {
+    param (
+        [Parameter(Mandatory = $true)]
+        [object[]]$Entries
+    )
+
+    foreach ($entry in $Entries) {
+        $entry.Issues = @($entry.Issues | Where-Object { $_.Short -ne 'ST:s' })
+    }
+}
+
+function Test-ScenarioIsFullySequential {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$ScenarioName
+    )
+
+    if (-not $script:scenarioProcessModelStats.ContainsKey($ScenarioName)) {
+        return $false
+    }
+
+    $stats = $script:scenarioProcessModelStats[$ScenarioName]
+    return $stats.Total -gt 0 -and $stats.Sequential -eq $stats.Total
+}
+
 function New-ValidationIssue {
     param (
         [Parameter(Mandatory = $true)]
@@ -395,6 +444,16 @@ function Add-ScenarioResult {
     if ($FileName -like $script:processModelPattern) {
         $businessKeysCount = ($XmlContent.SelectNodes($script:businessKeysXPath) | Measure-Object).Count
         $processModelName = Get-NodeValue -XmlDocument $XmlContent -XPath $script:processModelXPaths.name
+
+        if (-not $script:scenarioProcessModelStats.ContainsKey($ScenarioInfo.Name)) {
+            $script:scenarioProcessModelStats[$ScenarioInfo.Name] = @{ Total = 0; Sequential = 0 }
+        }
+
+        $script:scenarioProcessModelStats[$ScenarioInfo.Name].Total += 1
+
+        if (Test-IsSequentialScenarioProcessModel -XmlDocument $XmlContent) {
+            $script:scenarioProcessModelStats[$ScenarioInfo.Name].Sequential += 1
+        }
 
         $issues = New-Object System.Collections.Generic.List[object]
 
@@ -536,6 +595,7 @@ function Add-ScenarioResult {
 }
 
 $scenarioResults = @{}
+$scenarioProcessModelStats = @{}
 $totalFilesProcessed = 0
 
 $scenarioRootPath = $resolvedPath
@@ -649,6 +709,16 @@ foreach ($pscFile in $pscFiles) {
         }
     } finally {
         $zipArchive.Dispose()
+    }
+}
+
+foreach ($scenario in $scenarioResults.Values) {
+    if (Test-ScenarioIsFullySequential -ScenarioName $scenario.Name) {
+        Remove-SequentialStrategyIssues -Entries $scenario.Channels
+        Remove-SequentialStrategyIssues -Entries $scenario.Mappings
+
+        $scenario.Channels = @($scenario.Channels | Where-Object { $_.Issues.Count -gt 0 })
+        $scenario.Mappings = @($scenario.Mappings | Where-Object { $_.Issues.Count -gt 0 })
     }
 }
 
