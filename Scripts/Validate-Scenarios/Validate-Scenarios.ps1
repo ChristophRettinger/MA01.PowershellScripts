@@ -331,12 +331,33 @@ function Test-IsSequentialScenarioProcessModel {
 function Remove-SequentialStrategyIssues {
     param (
         [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [object[]]$Entries
     )
 
     foreach ($entry in $Entries) {
         $entry.Issues = @($entry.Issues | Where-Object { $_.Short -ne 'ST:s' })
     }
+}
+
+function Update-ValidationProgress {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Activity,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Current,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Total,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Status
+    )
+
+    $safeTotal = [Math]::Max($Total, 1)
+    $percentComplete = [int][Math]::Min(100, [Math]::Floor(($Current / $safeTotal) * 100))
+    Write-Progress -Activity $Activity -Status $Status -PercentComplete $percentComplete
 }
 
 function Test-ScenarioIsFullySequential {
@@ -632,9 +653,13 @@ if ($Mode -eq 'Folder') {
     }
 }
 
+$fileIndex = 0
 foreach ($file in $files) {
+    $fileIndex += 1
     $filePath = $file.FullName
     $scenarioInfo = Get-ScenarioInfo -FilePath $filePath -RootPath $scenarioRootPath
+
+    Update-ValidationProgress -Activity 'Validate scenarios' -Current $fileIndex -Total $files.Count -Status "Folder files ($($fileIndex)/$($files.Count)): $($file.Name)"
 
     try {
         $xmlContent = Get-XmlDocument -FilePath $filePath
@@ -648,7 +673,16 @@ foreach ($file in $files) {
     Add-ScenarioResult -ScenarioInfo $scenarioInfo -FileName $file.Name -FilePath $filePath -XmlContent $xmlContent
 }
 
+if ($files.Count -gt 0) {
+    Update-ValidationProgress -Activity 'Validate scenarios' -Current $files.Count -Total $files.Count -Status 'Folder file validation completed.'
+}
+
+$pscIndex = 0
 foreach ($pscFile in $pscFiles) {
+    $pscIndex += 1
+    $baseStatus = "PSC archives ($($pscIndex)/$($pscFiles.Count)): $($pscFile.Name)"
+    Update-ValidationProgress -Activity 'Validate scenarios' -Current $pscIndex -Total $pscFiles.Count -Status "$($baseStatus) - opening archive"
+
     $scenarioInfo = [PSCustomObject]@{
         Name = [System.IO.Path]::GetFileNameWithoutExtension($pscFile.Name)
         Path = $pscFile.FullName
@@ -663,7 +697,12 @@ foreach ($pscFile in $pscFiles) {
     }
 
     try {
+        $entryTotal = $zipArchive.Entries.Count
+        $entryIndex = 0
         foreach ($entry in $zipArchive.Entries) {
+            $entryIndex += 1
+            Update-ValidationProgress -Activity 'Validate scenarios' -Current $entryIndex -Total $entryTotal -Status "$($baseStatus) - entry $($entryIndex)/$($entryTotal)"
+
             $entryName = [System.IO.Path]::GetFileName($entry.FullName)
             if (-not $entryName) {
                 continue
@@ -711,6 +750,12 @@ foreach ($pscFile in $pscFiles) {
         $zipArchive.Dispose()
     }
 }
+
+if ($pscFiles.Count -gt 0) {
+    Update-ValidationProgress -Activity 'Validate scenarios' -Current $pscFiles.Count -Total $pscFiles.Count -Status 'PSC archive validation completed.'
+}
+
+Write-Progress -Activity 'Validate scenarios' -Completed
 
 foreach ($scenario in $scenarioResults.Values) {
     if (Test-ScenarioIsFullySequential -ScenarioName $scenario.Name) {
