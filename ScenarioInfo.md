@@ -155,6 +155,8 @@ Supported exception codes:
 
 When the script finds a non-default configuration that matches an exception code, it suppresses the entry by default and can optionally list it with an "exception configured" note.
 
+Validation now reports progress while scanning folder files and PSC archive entries.
+
 ## Orchestra git working copy notes
 
 Orchestra scenario working copies often contain local machine artifacts that should stay untracked.
