@@ -261,7 +261,7 @@ function Write-RepositoryStatusLine {
     )
 
     $overviewColor = 'Green'
-    if ($Status.Overview -like 'Pending changes*') {
+    if ($Status.Overview -like 'Pending*') {
         $overviewColor = 'Yellow'
     } elseif ($Status.Overview -like 'Update available*') {
         $overviewColor = 'Red'
