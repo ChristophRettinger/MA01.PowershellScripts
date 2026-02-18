@@ -16,7 +16,7 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 - **Evaluate-OrchestraErrorsViaElastic.ps1** - Aggregates failed Orchestra scenarios from Elasticsearch and optionally exports normalized error XML.
 - **Evaluate-AdmKavideErrors.ps1** - Collects and summarizes Kavide scenario errors from Elasticsearch with per-case details.
 - **Get-PatientInfo.ps1** - Retrieves SUBFL HCM messages for a patient or case and exports structured JSON.
-- **Handle-OrchestraGit.ps1** - Scans Orchestra git repositories, ensures required local excludes, reports one-line repository status summaries, and supports update/reset actions.
+- **Handle-OrchestraGit.ps1** - Scans Orchestra git repositories, ensures required local excludes, reports fixed-width status lines, and supports update/reset actions (reset also removes untracked files).
 - **Validate-Scenarios.ps1** - Validates scenario folders or PSC archives, with optional mode selection, validation-category filtering, folder/PSC name filtering, and optional text report output (ignores non-XML PSC entries).
 - **Transfer-OperationData.ps1** - Transfers DataStore rows into OrchestraOperationData using resumable batches.
 - **Create-ProcessModelOverview.ps1** - Parses ProcessModell_* XML files and creates Markdown overviews for model metadata, variables, business keys, merged element detail rows (`Name`, `Type`, `Usage`, `Input Expression`, `Output Expression`), and gateway outgoing edge conditions (including EdgeSequence-based paths and else branches), writing reports to the script-local `Output` folder by default.

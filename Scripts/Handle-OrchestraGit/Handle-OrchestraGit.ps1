@@ -6,15 +6,16 @@
     Detects repository roots by locating `.git` directories beneath the supplied path.
     For the `Status`, `Update`/`Pull`, and `Reset` actions, the script ensures required
     exclude entries exist in each repository's `.git/info/exclude` file, evaluates
-    repository state, optionally updates repositories, and prints a single-line,
-    colorized status overview per repository.
+    repository state (including short pending-change counts), optionally updates
+    repositories, and prints a fixed-width, colorized status overview per repository.
 
 .PARAMETER Path
     Folder that is either a repository root (contains `.git`) or a parent folder that
     contains one or more repository roots.
 
 .PARAMETER Action
-    Action to execute. Supports `Status`, `Update`, `Pull`, and `Reset`.
+    Action to execute. Supports `Status`, `Update`, `Pull`, and `Reset`
+    (`Reset` also removes untracked files).
 
 .PARAMETER Output
     Optional output file path or output folder path to additionally write the plain-text
@@ -140,8 +141,23 @@ function Get-RepositoryStatus {
         $tag = '-'
     }
 
-    $pendingChanges = (& git -C $RepositoryPath status --porcelain 2>$null)
+    $pendingChanges = @(& git -C $RepositoryPath status --porcelain 2>$null)
     $hasPendingChanges = -not [string]::IsNullOrWhiteSpace(($pendingChanges | Out-String).Trim())
+    $untrackedFiles = 0
+    $changedFiles = 0
+
+    foreach ($pendingLine in $pendingChanges) {
+        if ([string]::IsNullOrWhiteSpace($pendingLine)) {
+            continue
+        }
+
+        if ($pendingLine.StartsWith('??')) {
+            $untrackedFiles++
+            continue
+        }
+
+        $changedFiles++
+    }
 
     & git -C $RepositoryPath fetch --quiet --all --prune 2>$null
 
@@ -149,7 +165,7 @@ function Get-RepositoryStatus {
     $overview = 'Up to date'
 
     if ($hasPendingChanges) {
-        $overview = 'Pending changes'
+        $overview = "Pending c:$($changedFiles) u:$($untrackedFiles)"
     } elseif (-not [string]::IsNullOrWhiteSpace($upstream)) {
         $aheadBehind = (& git -C $RepositoryPath rev-list --left-right --count 'HEAD...@{u}' 2>$null)
         if (-not [string]::IsNullOrWhiteSpace($aheadBehind)) {
@@ -172,6 +188,8 @@ function Get-RepositoryStatus {
         Tag = $tag.Trim()
         Overview = $overview
         HasPendingChanges = $hasPendingChanges
+        ChangedFiles = $changedFiles
+        UntrackedFiles = $untrackedFiles
         Upstream = if ([string]::IsNullOrWhiteSpace($upstream)) { '' } else { $upstream.Trim() }
     }
 }
@@ -232,6 +250,7 @@ function Invoke-RepositoryAction {
         }
 
         & git -C $RepositoryPath reset --hard $Status.Upstream 2>$null
+        & git -C $RepositoryPath clean -fd 2>$null
     }
 }
 
@@ -248,12 +267,25 @@ function Write-RepositoryStatusLine {
         $overviewColor = 'Red'
     }
 
-    Write-Host -NoNewline 'Repo: ' -ForegroundColor DarkGray
-    Write-Host -NoNewline $Status.Name -ForegroundColor Cyan
-    Write-Host -NoNewline ' | Tag: ' -ForegroundColor DarkGray
-    Write-Host -NoNewline $Status.Tag -ForegroundColor Magenta
-    Write-Host -NoNewline ' | Status: ' -ForegroundColor DarkGray
+    $repoDisplay = '{0,-60}' -f $Status.Name
+    $tagDisplay = '{0,-20}' -f $Status.Tag
+
+    Write-Host -NoNewline $repoDisplay -ForegroundColor Cyan
+    Write-Host -NoNewline ' | ' -ForegroundColor DarkGray
+    Write-Host -NoNewline $tagDisplay -ForegroundColor Magenta
+    Write-Host -NoNewline ' | ' -ForegroundColor DarkGray
     Write-Host $Status.Overview -ForegroundColor $overviewColor
+}
+
+function Get-OutputStatusLine {
+    param (
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Status
+    )
+
+    $repoDisplay = '{0,-60}' -f $Status.Name
+    $tagDisplay = '{0,-20}' -f $Status.Tag
+    return "$($repoDisplay) | $($tagDisplay) | $($Status.Overview)"
 }
 
 $repositoryRoots = Resolve-RepositoryRoots -RootPath $Path
@@ -270,7 +302,7 @@ switch ($Action) {
             Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Write-RepositoryStatusLine -Status $status
-            $outputLines.Add("Repo: $($status.Name) | Tag: $($status.Tag) | Status: $($status.Overview)") | Out-Null
+            $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
         }
     }
     'Update' {
@@ -280,7 +312,7 @@ switch ($Action) {
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Write-RepositoryStatusLine -Status $status
-            $outputLines.Add("Repo: $($status.Name) | Tag: $($status.Tag) | Status: $($status.Overview)") | Out-Null
+            $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
         }
     }
     'Pull' {
@@ -290,7 +322,7 @@ switch ($Action) {
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Write-RepositoryStatusLine -Status $status
-            $outputLines.Add("Repo: $($status.Name) | Tag: $($status.Tag) | Status: $($status.Overview)") | Out-Null
+            $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
         }
     }
     'Reset' {
@@ -300,7 +332,7 @@ switch ($Action) {
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Write-RepositoryStatusLine -Status $status
-            $outputLines.Add("Repo: $($status.Name) | Tag: $($status.Tag) | Status: $($status.Overview)") | Out-Null
+            $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
         }
     }
 }
