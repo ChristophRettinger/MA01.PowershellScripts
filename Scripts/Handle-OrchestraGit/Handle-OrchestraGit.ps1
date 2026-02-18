@@ -4,16 +4,17 @@
 
 .DESCRIPTION
     Detects repository roots by locating `.git` directories beneath the supplied path.
-    For the `Status` action, the script ensures required exclude entries exist in each
-    repository's `.git/info/exclude` file, evaluates repository state, and prints a
-    single-line, colorized status overview per repository.
+    For the `Status`, `Update`/`Pull`, and `Reset` actions, the script ensures required
+    exclude entries exist in each repository's `.git/info/exclude` file, evaluates
+    repository state, optionally updates repositories, and prints a single-line,
+    colorized status overview per repository.
 
 .PARAMETER Path
     Folder that is either a repository root (contains `.git`) or a parent folder that
     contains one or more repository roots.
 
 .PARAMETER Action
-    Action to execute. Currently supports `Status`.
+    Action to execute. Supports `Status`, `Update`, `Pull`, and `Reset`.
 
 .PARAMETER Output
     Optional output file path or output folder path to additionally write the plain-text
@@ -31,7 +32,7 @@ param (
     [string]$Path = '.',
 
     [Parameter(Mandatory = $false)]
-    [ValidateSet('Status')]
+    [ValidateSet('Status', 'Update', 'Pull', 'Reset')]
     [string]$Action = 'Status',
 
     [Parameter(Mandatory = $false)]
@@ -39,12 +40,22 @@ param (
 )
 
 $requiredExcludeEntries = @(
-    '/orc.cred',
+    '/.orc.cred',
     '/association.map',
     '/lock',
     '/*.local',
     '/TestEnvironment*'
 )
+
+function Get-NormalizedPath {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    return $fullPath.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+}
 
 function Resolve-RepositoryRoots {
     param (
@@ -52,18 +63,22 @@ function Resolve-RepositoryRoots {
         [string]$RootPath
     )
 
-    $resolvedRoot = (Resolve-Path -Path $RootPath -ErrorAction Stop).Path
+    $resolvedRoot = Get-NormalizedPath -Path ((Resolve-Path -Path $RootPath -ErrorAction Stop).Path)
     $repositories = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
 
     $rootGitFolder = Join-Path -Path $resolvedRoot -ChildPath '.git'
-    if (Test-Path -Path $rootGitFolder -PathType Container) {
+    if ((Test-Path -Path $rootGitFolder -PathType Container) -or (Test-Path -Path $rootGitFolder -PathType Leaf)) {
         $null = $repositories.Add($resolvedRoot)
     }
 
     $gitDirectories = Get-ChildItem -Path $resolvedRoot -Directory -Filter '.git' -Recurse -Force -ErrorAction SilentlyContinue
     foreach ($gitDirectory in $gitDirectories) {
+        if ((Get-NormalizedPath -Path $gitDirectory.FullName) -eq (Get-NormalizedPath -Path $rootGitFolder)) {
+            continue
+        }
+
         $repositoryRoot = Split-Path -Path $gitDirectory.FullName -Parent
-        $null = $repositories.Add($repositoryRoot)
+        $null = $repositories.Add((Get-NormalizedPath -Path $repositoryRoot))
     }
 
     return $repositories | Sort-Object
@@ -146,7 +161,7 @@ function Get-RepositoryStatus {
                 }
 
                 if ($behindCount -gt 0) {
-                    $overview = "Update available ($($upstream))"
+                    $overview = "Update available ($(Get-UpstreamVersionLabel -RepositoryPath $RepositoryPath -Reference $upstream))"
                 }
             }
         }
@@ -156,6 +171,67 @@ function Get-RepositoryStatus {
         Name = $repoName
         Tag = $tag.Trim()
         Overview = $overview
+        HasPendingChanges = $hasPendingChanges
+        Upstream = if ([string]::IsNullOrWhiteSpace($upstream)) { '' } else { $upstream.Trim() }
+    }
+}
+
+function Get-UpstreamVersionLabel {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Reference
+    )
+
+    $shortHash = (& git -C $RepositoryPath rev-parse --short $Reference 2>$null)
+    $shortHash = $shortHash.Trim()
+    if ([string]::IsNullOrWhiteSpace($shortHash)) {
+        return 'unknown'
+    }
+
+    $tag = (& git -C $RepositoryPath describe --tags --exact-match $Reference 2>$null)
+    $tag = $tag.Trim()
+
+    if ([string]::IsNullOrWhiteSpace($tag)) {
+        return $shortHash
+    }
+
+    return "$($tag) $($shortHash)"
+}
+
+function Invoke-RepositoryAction {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ActionName,
+
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Status
+    )
+
+    if ($ActionName -in @('Update', 'Pull')) {
+        if ($Status.HasPendingChanges) {
+            return
+        }
+
+        if ([string]::IsNullOrWhiteSpace($Status.Upstream)) {
+            return
+        }
+
+        & git -C $RepositoryPath pull --ff-only --quiet 2>$null
+        return
+    }
+
+    if ($ActionName -eq 'Reset') {
+        if ([string]::IsNullOrWhiteSpace($Status.Upstream)) {
+            return
+        }
+
+        & git -C $RepositoryPath reset --hard $Status.Upstream 2>$null
     }
 }
 
@@ -192,6 +268,36 @@ switch ($Action) {
     'Status' {
         foreach ($repositoryRoot in $repositoryRoots) {
             Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
+            $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
+            Write-RepositoryStatusLine -Status $status
+            $outputLines.Add("Repo: $($status.Name) | Tag: $($status.Tag) | Status: $($status.Overview)") | Out-Null
+        }
+    }
+    'Update' {
+        foreach ($repositoryRoot in $repositoryRoots) {
+            Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
+            $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
+            Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
+            $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
+            Write-RepositoryStatusLine -Status $status
+            $outputLines.Add("Repo: $($status.Name) | Tag: $($status.Tag) | Status: $($status.Overview)") | Out-Null
+        }
+    }
+    'Pull' {
+        foreach ($repositoryRoot in $repositoryRoots) {
+            Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
+            $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
+            Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
+            $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
+            Write-RepositoryStatusLine -Status $status
+            $outputLines.Add("Repo: $($status.Name) | Tag: $($status.Tag) | Status: $($status.Overview)") | Out-Null
+        }
+    }
+    'Reset' {
+        foreach ($repositoryRoot in $repositoryRoots) {
+            Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
+            $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
+            Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Write-RepositoryStatusLine -Status $status
             $outputLines.Add("Repo: $($status.Name) | Tag: $($status.Tag) | Status: $($status.Overview)") | Out-Null
