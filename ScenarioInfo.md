@@ -151,6 +151,19 @@ Supported exception codes:
 
 When the script finds a non-default configuration that matches an exception code, it suppresses the entry by default and can optionally list it with an "exception configured" note.
 
+## Orchestra git working copy notes
+
+Orchestra scenario working copies often contain local machine artifacts that should stay untracked.
+For repositories handled by `Handle-OrchestraGit`, `.git/info/exclude` is ensured to contain at least:
+
+- `/orc.cred`
+- `/association.map`
+- `/lock`
+- `/*.local`
+- `/TestEnvironment*`
+
+This keeps local runtime files out of `git status` without requiring repository-level `.gitignore` changes.
+
 ## Script parameter conventions
 - Repository scripts that expose both `StartDate` and `EndDate` can also accept `Timespan` as an alternative end-bound.
 - `Timespan` accepts numeric minute values and PowerShell `TimeSpan` values.
