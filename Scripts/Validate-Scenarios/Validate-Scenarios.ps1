@@ -664,7 +664,15 @@ if (-not $scenariosWithIssues) {
     Add-OutputLine -Line 'Scenario Validation Results (Incorrect Configurations):'
     Add-OutputLine -Line ''
 
-    foreach ($scenario in $scenariosWithIssues | Sort-Object Name) {
+    $sortedScenarios = $scenariosWithIssues | Sort-Object -Property @{ Expression = {
+        if ($_.Name) {
+            $_.Name.Trim().ToUpperInvariant()
+        } else {
+            ''
+        }
+    }}
+
+    foreach ($scenario in $sortedScenarios) {
         Write-Host -NoNewline $scenario.Name -ForegroundColor $scenarioColor
         Write-Host " [$($scenario.Path)]"
         Add-OutputLine -Line "$($scenario.Name) [$($scenario.Path)]"
