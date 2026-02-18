@@ -136,7 +136,7 @@ function Get-RepositoryStatus {
     if ($hasPendingChanges) {
         $overview = 'Pending changes'
     } elseif (-not [string]::IsNullOrWhiteSpace($upstream)) {
-        $aheadBehind = (& git -C $RepositoryPath rev-list --left-right --count HEAD...@{u} 2>$null)
+        $aheadBehind = (& git -C $RepositoryPath rev-list --left-right --count 'HEAD...@{u}' 2>$null)
         if (-not [string]::IsNullOrWhiteSpace($aheadBehind)) {
             $parts = $aheadBehind.Trim() -split '\s+'
             if ($parts.Count -ge 2) {
