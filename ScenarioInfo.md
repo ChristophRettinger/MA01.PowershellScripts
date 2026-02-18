@@ -163,6 +163,8 @@ For repositories handled by `Handle-OrchestraGit`, `.git/info/exclude` is ensure
 - `/TestEnvironment*`
 
 This keeps local runtime files out of `git status` without requiring repository-level `.gitignore` changes.
+`Reset` aligns to upstream with `git reset --hard` and also removes untracked files via `git clean -fd`.
+Pending-change summaries show short counts for tracked (`c`) and untracked (`u`) files.
 
 ## Script parameter conventions
 - Repository scripts that expose both `StartDate` and `EndDate` can also accept `Timespan` as an alternative end-bound.
