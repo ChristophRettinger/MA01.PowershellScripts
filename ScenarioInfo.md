@@ -77,6 +77,8 @@ Validation reads channel fields from the document root regardless of the specifi
 
 A channel is considered non-concurrent when `numberOfInstances` is `1`.
 
+Sequential channels are allowed when all process models in the same scenario use sequential scheduling (`isFifo:true`, `isGroupedFifo:false`, `bestEffortLimit:0`, `pipelineMode:false`).
+
 ## Message mapping files (`MessageMapping_*`)
 
 XML root name: `emds.mapping.proc.MappingScript`.
@@ -89,6 +91,8 @@ Validation reads:
 - `/emds.mapping.proc.MappingScript/parallelExecution`: `true`/`false` concurrency flag.
 
 Mappings are flagged when `parallelExecution` is not `true`.
+
+Sequential mappings are allowed when all process models in the same scenario use sequential scheduling (`isFifo:true`, `isGroupedFifo:false`, `bestEffortLimit:0`, `pipelineMode:false`).
 
 ## Naming conventions
 
