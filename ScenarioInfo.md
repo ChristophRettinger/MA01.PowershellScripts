@@ -74,9 +74,12 @@ Validation reads channel fields from the document root regardless of the specifi
 
 - `/*/name`: Channel name.
 - `/*/numberOfInstances`: Concurrency count (when available).
-- `/*/isSynchronous`: Synchronous execution flag (used when `numberOfInstances` is not present).
+- `/*/root-name`: Channel XML root name used for type-specific ST validation exclusions.
 
-A channel is considered non-concurrent when either `numberOfInstances` is `1` or `isSynchronous` is `true`.
+A channel is considered non-concurrent when `numberOfInstances` is `1`. ST validation is skipped for the following channel root names:
+
+- `emds.epi.impl.adapter.tcp.mllp.MLLPConfigInbound`
+- `emds.epi.impl.adapter.http.inbound.HttpAdapterGeneralPostConfig`
 
 Sequential channels are allowed when all process models in the same scenario use sequential scheduling (`isFifo:true`, `isGroupedFifo:false`, `bestEffortLimit:0`, `pipelineMode:false`).
 
