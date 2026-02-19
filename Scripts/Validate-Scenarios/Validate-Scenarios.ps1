@@ -9,7 +9,8 @@
     beneath the root path, or by PSC file name), the script checks process model
     settings, business key counts, channel concurrency, and mapping parallel
     execution rules. Sequential channels/mappings are allowed when all process models in the
-    scenario use sequential scheduling. Results are grouped by scenario name and printed with colored
+    scenario use sequential scheduling. Channel strategy is derived from either
+    numberOfInstances or isSynchronous (depending on which tag exists). Results are grouped by scenario name and printed with colored
     headings for the scenario, process models, channels, and mappings. Description
     tags in each XML document can include exception codes (for example: "PM:v; RS:a;
     SC:p75") to allow deviations from the default validation rules.
@@ -565,7 +566,14 @@ function Add-ScenarioResult {
     if ($FileName -like $script:channelPattern) {
         $channelName = Get-NodeValue -XmlDocument $XmlContent -XPath '/*[1]/name'
         $numberOfInstances = Get-NodeValue -XmlDocument $XmlContent -XPath '/*[1]/numberOfInstances'
-        $strategyCode = if ($numberOfInstances -eq '1') { 's' } else { 'p' }
+        $isSynchronous = Get-NodeValue -XmlDocument $XmlContent -XPath '/*[1]/isSynchronous'
+        $strategyCode = 'p'
+
+        if ($numberOfInstances -ne 'N/A') {
+            $strategyCode = if ($numberOfInstances -eq '1') { 's' } else { 'p' }
+        } elseif ($isSynchronous -ne 'N/A') {
+            $strategyCode = if ($isSynchronous.Equals('true', [System.StringComparison]::OrdinalIgnoreCase)) { 's' } else { 'p' }
+        }
 
         if ((Test-CategoryEnabled -Category 'ST') -and $strategyCode -ne 'p') {
             $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'ST' -Value $strategyCode

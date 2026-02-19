@@ -73,9 +73,10 @@ Each channel XML supports a `description` element directly below the root. Valid
 Validation reads channel fields from the document root regardless of the specific channel type:
 
 - `/*/name`: Channel name.
-- `/*/numberOfInstances`: Concurrency count.
+- `/*/numberOfInstances`: Concurrency count (when available).
+- `/*/isSynchronous`: Synchronous execution flag (used when `numberOfInstances` is not present).
 
-A channel is considered non-concurrent when `numberOfInstances` is `1`.
+A channel is considered non-concurrent when either `numberOfInstances` is `1` or `isSynchronous` is `true`.
 
 Sequential channels are allowed when all process models in the same scenario use sequential scheduling (`isFifo:true`, `isGroupedFifo:false`, `bestEffortLimit:0`, `pipelineMode:false`).
 
