@@ -161,7 +161,8 @@ function Get-ScenarioInfo {
     }
 
     if ($relativePath) {
-        $scenarioName = ([regex]::Split($relativePath, '[\\/]+') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })[0]
+        $relativePathSegments = @([regex]::Split($relativePath, '[\\/]+') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $scenarioName = if ($relativePathSegments.Count -gt 0) { [string]$relativePathSegments[0] } else { '' }
         $scenarioPath = Join-Path -Path $RootPath -ChildPath $scenarioName
     } else {
         $scenarioName = Split-Path -Path $directoryPath -Leaf
