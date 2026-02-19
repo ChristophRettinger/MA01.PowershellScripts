@@ -147,7 +147,7 @@ function Get-RepositoryStatus {
         if ([string]::IsNullOrWhiteSpace($lastTag)) {
             $tag = '-'
         } else {
-            $tag = "($($lastTag))"
+            $tag = "$($lastTag)*"
         }
     }
 
