@@ -4,18 +4,19 @@
 
 .DESCRIPTION
     Detects repository roots by locating `.git` directories beneath the supplied path.
-    For the `Status`, `Update`/`Pull`, and `Reset` actions, the script ensures required
-    exclude entries exist in each repository's `.git/info/exclude` file, evaluates
-    repository state (including short pending-change counts), optionally updates
-    repositories, and prints a fixed-width, colorized status overview per repository.
+    For every action, the script ensures required exclude entries exist in each
+    repository's `.git/info/exclude` file, evaluates repository state (including short
+    pending-change counts), optionally applies the selected action, and prints a
+    fixed-width, colorized status overview per repository.
 
 .PARAMETER Path
     Folder that is either a repository root (contains `.git`) or a parent folder that
     contains one or more repository roots.
 
 .PARAMETER Action
-    Action to execute. Supports `Status`, `Update`, `Pull`, and `Reset`
-    (`Reset` also removes untracked files).
+    Action to execute. Supports `Status`, `Update`, `Pull`, `Reset`, and `Clean`.
+    `Reset` also removes untracked files. `Clean` untracks files that are currently
+    tracked but match `.git/info/exclude` rules.
 
 .PARAMETER Output
     Optional output file path or output folder path to additionally write the plain-text
@@ -33,7 +34,7 @@ param (
     [string]$Path = '.',
 
     [Parameter(Mandatory = $false)]
-    [ValidateSet('Status', 'Update', 'Pull', 'Reset')]
+    [ValidateSet('Status', 'Update', 'Pull', 'Reset', 'Clean')]
     [string]$Action = 'Status',
 
     [Parameter(Mandatory = $false)]
@@ -251,6 +252,24 @@ function Invoke-RepositoryAction {
 
         & git -C $RepositoryPath reset --hard $Status.Upstream 2>$null
         & git -C $RepositoryPath clean -fd 2>$null
+        return
+    }
+
+    if ($ActionName -eq 'Clean') {
+        $excludePath = Join-Path -Path $RepositoryPath -ChildPath '.git/info/exclude'
+        if (-not (Test-Path -Path $excludePath -PathType Leaf)) {
+            return
+        }
+
+        $trackedIgnoredFiles = @(& git -C $RepositoryPath ls-files -ci --exclude-from=$excludePath 2>$null)
+
+        foreach ($trackedIgnoredFile in $trackedIgnoredFiles) {
+            if ([string]::IsNullOrWhiteSpace($trackedIgnoredFile)) {
+                continue
+            }
+
+            & git -C $RepositoryPath rm --cached --quiet -- $trackedIgnoredFile 2>$null
+        }
     }
 }
 
@@ -326,6 +345,16 @@ switch ($Action) {
         }
     }
     'Reset' {
+        foreach ($repositoryRoot in $repositoryRoots) {
+            Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
+            $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
+            Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
+            $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
+            Write-RepositoryStatusLine -Status $status
+            $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
+        }
+    }
+    'Clean' {
         foreach ($repositoryRoot in $repositoryRoots) {
             Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
             $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
