@@ -2,7 +2,7 @@
 
 ## Overview
 
-This file summarizes the Orchestra scenario folder layout and highlights the configuration values that the `Validate-Scenarios` script inspects. Scenario folders are organized by scenario name and contain XML configuration artifacts without file extensions. The script can optionally filter validations to specific category codes (for example: ST, PM), filter scenario folder names or PSC file names, and switch between folder and PSC validation modes.
+This file summarizes the Orchestra scenario folder layout and highlights the configuration values that the `Validate-Scenarios` script inspects. Scenario folders are organized by scenario name and contain XML configuration artifacts without file extensions. In folder mode, the script accepts either a directory that contains scenario folders or a direct path to a single scenario folder. The script can optionally filter validations to specific category codes (for example: ST, PM), filter scenario folder names or PSC file names, and switch between folder and PSC validation modes.
 
 ## Scenario root layout
 

@@ -161,8 +161,7 @@ function Get-ScenarioInfo {
     }
 
     if ($relativePath) {
-        $separatorChars = @([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-        $scenarioName = $relativePath.Split($separatorChars, [System.StringSplitOptions]::RemoveEmptyEntries)[0]
+        $scenarioName = ([regex]::Split($relativePath, '[\\/]+') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })[0]
         $scenarioPath = Join-Path -Path $RootPath -ChildPath $scenarioName
     } else {
         $scenarioName = Split-Path -Path $directoryPath -Leaf
@@ -630,9 +629,24 @@ $totalFilesProcessed = 0
 $scenarioRootPath = $resolvedPath
 $files = @()
 $pscFiles = @()
+$treatPathAsSingleScenario = $false
 
 if ($Mode -eq 'Folder') {
-    $scenarioFolders = Get-ChildItem -Path $resolvedPath -Directory -ErrorAction SilentlyContinue
+    $rootConfigurationFiles = Get-ChildItem -Path $resolvedPath -File -ErrorAction SilentlyContinue | Where-Object {
+        ($_.Name -like $processModelPattern -or $_.Name -like $channelPattern -or $_.Name -like $mappingPattern) -and $_.Extension -eq ""
+    }
+
+    if ($rootConfigurationFiles) {
+        $scenarioFolders = @(Get-Item -Path $resolvedPath)
+        $scenarioRootPath = Split-Path -Path $resolvedPath -Parent
+        if (-not $scenarioRootPath) {
+            $scenarioRootPath = $resolvedPath
+        }
+        $treatPathAsSingleScenario = $true
+    } else {
+        $scenarioFolders = Get-ChildItem -Path $resolvedPath -Directory -ErrorAction SilentlyContinue
+    }
+
     if (-not $scenarioFolders) {
         $scenarioFolders = @(Get-Item -Path $resolvedPath)
         $scenarioRootPath = Split-Path -Path $resolvedPath -Parent
@@ -665,7 +679,16 @@ $fileIndex = 0
 foreach ($file in $files) {
     $fileIndex += 1
     $filePath = $file.FullName
-    $scenarioInfo = Get-ScenarioInfo -FilePath $filePath -RootPath $scenarioRootPath
+
+    if ($treatPathAsSingleScenario) {
+        $rootItem = Get-Item -Path $resolvedPath
+        $scenarioInfo = [PSCustomObject]@{
+            Name = $rootItem.Name
+            Path = $rootItem.FullName
+        }
+    } else {
+        $scenarioInfo = Get-ScenarioInfo -FilePath $filePath -RootPath $scenarioRootPath
+    }
 
     Update-ValidationProgress -Activity 'Validate scenarios' -Current $fileIndex -Total $files.Count -Status "Folder files ($($fileIndex)/$($files.Count)): $($file.Name)"
 
