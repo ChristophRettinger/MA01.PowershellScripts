@@ -163,7 +163,7 @@ Validation now reports progress while scanning folder files and PSC archive entr
 Orchestra scenario working copies often contain local machine artifacts that should stay untracked.
 For repositories handled by `Handle-OrchestraGit`, `.git/info/exclude` is ensured to contain at least:
 
-- `/orc.cred`
+- `/.orc.cred`
 - `/association.map`
 - `/lock`
 - `/*.local`
@@ -171,6 +171,7 @@ For repositories handled by `Handle-OrchestraGit`, `.git/info/exclude` is ensure
 
 This keeps local runtime files out of `git status` without requiring repository-level `.gitignore` changes.
 `Reset` aligns to upstream with `git reset --hard` and also removes untracked files via `git clean -fd`.
+`Clean` untracks files that are already tracked but now match `.git/info/exclude` patterns.
 Pending-change summaries show short counts for tracked (`c`) and untracked (`u`) files.
 
 ## Script parameter conventions
