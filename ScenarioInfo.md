@@ -175,7 +175,7 @@ For repositories handled by `Handle-OrchestraGit`, `.git/info/exclude` is ensure
 This keeps local runtime files out of `git status` without requiring repository-level `.gitignore` changes.
 `Reset` aligns to upstream with `git reset --hard` and also removes untracked files via `git clean -fd`.
 `Clean` untracks files that are already tracked but now match `.git/info/exclude` patterns.
-Pending-change summaries show short counts for tracked (`c`) and untracked (`u`) files.
+Pending-change summaries show short counts for tracked (`c`) and untracked (`u`) files and now also show update availability when both states apply.
 When the current commit is not directly tagged, the status column shows the most recent reachable tag in parentheses.
 
 ## Script parameter conventions
