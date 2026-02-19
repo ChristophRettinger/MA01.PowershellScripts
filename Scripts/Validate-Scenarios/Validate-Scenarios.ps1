@@ -569,10 +569,10 @@ function Add-ScenarioResult {
         $isSynchronous = Get-NodeValue -XmlDocument $XmlContent -XPath '/*[1]/isSynchronous'
         $strategyCode = 'p'
 
-        if ($numberOfInstances -ne 'N/A') {
-            $strategyCode = if ($numberOfInstances -eq '1') { 's' } else { 'p' }
-        } elseif ($isSynchronous -ne 'N/A') {
+        if ($isSynchronous -ne 'N/A') {
             $strategyCode = if ($isSynchronous.Equals('true', [System.StringComparison]::OrdinalIgnoreCase)) { 's' } else { 'p' }
+        } elseif ($numberOfInstances -ne 'N/A') {
+            $strategyCode = if ($numberOfInstances -eq '1') { 's' } else { 'p' }
         }
 
         if ((Test-CategoryEnabled -Category 'ST') -and $strategyCode -ne 'p') {
