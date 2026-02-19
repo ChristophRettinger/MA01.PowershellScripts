@@ -137,9 +137,17 @@ function Get-RepositoryStatus {
     )
 
     $repoName = Split-Path -Path $RepositoryPath -Leaf
-    $tag = (& git -C $RepositoryPath describe --tags --exact-match 2>$null)
+    $exactTag = (& git -C $RepositoryPath describe --tags --exact-match 2>$null)
+    $tag = "$($exactTag)".Trim()
     if ([string]::IsNullOrWhiteSpace($tag)) {
-        $tag = '-'
+        $lastTag = (& git -C $RepositoryPath describe --tags --abbrev=0 2>$null)
+        $lastTag = "$($lastTag)".Trim()
+
+        if ([string]::IsNullOrWhiteSpace($lastTag)) {
+            $tag = '-'
+        } else {
+            $tag = "($($lastTag))"
+        }
     }
 
     $pendingChanges = @(& git -C $RepositoryPath status --porcelain 2>$null)
@@ -287,7 +295,7 @@ function Write-RepositoryStatusLine {
     }
 
     $repoDisplay = '{0,-60}' -f $Status.Name
-    $tagDisplay = '{0,-20}' -f $Status.Tag
+    $tagDisplay = '{0,-22}' -f $Status.Tag
 
     Write-Host -NoNewline $repoDisplay -ForegroundColor Cyan
     Write-Host -NoNewline ' | ' -ForegroundColor DarkGray
@@ -303,7 +311,7 @@ function Get-OutputStatusLine {
     )
 
     $repoDisplay = '{0,-60}' -f $Status.Name
-    $tagDisplay = '{0,-20}' -f $Status.Tag
+    $tagDisplay = '{0,-22}' -f $Status.Tag
     return "$($repoDisplay) | $($tagDisplay) | $($Status.Overview)"
 }
 
