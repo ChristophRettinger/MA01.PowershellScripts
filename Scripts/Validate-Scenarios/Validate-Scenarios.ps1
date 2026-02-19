@@ -95,7 +95,8 @@ $channelPattern = 'Channel_*'
 $mappingPattern = 'MessageMapping_*'
 $channelRootTypesWithoutStValidation = @(
     'emds.epi.impl.adapter.tcp.mllp.MLLPConfigInbound',
-    'emds.epi.impl.adapter.http.inbound.HttpAdapterGeneralPostConfig'
+    'emds.epi.impl.adapter.http.inbound.HttpAdapterGeneralPostConfig',
+	'emds.epi.impl.adapter.database.DatabaseInboundConfig'
 )
 
 $businessKeysXPath = '/ProcessModel/businessKeys/Property'
