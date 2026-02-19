@@ -6,8 +6,9 @@
     Detects repository roots by locating `.git` directories beneath the supplied path.
     For every action, the script ensures required exclude entries exist in each
     repository's `.git/info/exclude` file, evaluates repository state (including short
-    pending-change counts), optionally applies the selected action, and prints a
-    fixed-width, colorized status overview per repository.
+    pending-change counts and available upstream updates), optionally applies the
+    selected action, and prints a fixed-width, colorized status overview per
+    repository.
 
 .PARAMETER Path
     Folder that is either a repository root (contains `.git`) or a parent folder that
@@ -168,14 +169,13 @@ function Get-RepositoryStatus {
         $changedFiles++
     }
 
+    $upstream = (& git -C $RepositoryPath rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null)
     & git -C $RepositoryPath fetch --quiet --all --prune 2>$null
 
-    $upstream = (& git -C $RepositoryPath rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null)
-    $overview = 'Up to date'
+    $updateSummary = ''
+    $isUpdateAvailable = $false
 
-    if ($hasPendingChanges) {
-        $overview = "Pending c:$($changedFiles) u:$($untrackedFiles)"
-    } elseif (-not [string]::IsNullOrWhiteSpace($upstream)) {
+    if (-not [string]::IsNullOrWhiteSpace($upstream)) {
         $aheadBehind = (& git -C $RepositoryPath rev-list --left-right --count 'HEAD...@{u}' 2>$null)
         if (-not [string]::IsNullOrWhiteSpace($aheadBehind)) {
             $parts = $aheadBehind.Trim() -split '\s+'
@@ -186,9 +186,24 @@ function Get-RepositoryStatus {
                 }
 
                 if ($behindCount -gt 0) {
-                    $overview = "Update available ($(Get-UpstreamVersionLabel -RepositoryPath $RepositoryPath -Reference $upstream))"
+                    $isUpdateAvailable = $true
+                    $updateSummary = "Update available ($(Get-UpstreamVersionLabel -RepositoryPath $RepositoryPath -Reference $upstream))"
                 }
             }
+        }
+    }
+
+    $overview = 'Up to date'
+
+    if ($hasPendingChanges) {
+        $overview = "Pending c:$($changedFiles) u:$($untrackedFiles)"
+    }
+
+    if ($isUpdateAvailable) {
+        if ($hasPendingChanges) {
+            $overview = "$($overview) | $($updateSummary)"
+        } else {
+            $overview = $updateSummary
         }
     }
 
@@ -199,6 +214,8 @@ function Get-RepositoryStatus {
         HasPendingChanges = $hasPendingChanges
         ChangedFiles = $changedFiles
         UntrackedFiles = $untrackedFiles
+        IsUpdateAvailable = $isUpdateAvailable
+        UpdateSummary = $updateSummary
         Upstream = if ([string]::IsNullOrWhiteSpace($upstream)) { '' } else { $upstream.Trim() }
     }
 }
@@ -301,6 +318,15 @@ function Write-RepositoryStatusLine {
     Write-Host -NoNewline ' | ' -ForegroundColor DarkGray
     Write-Host -NoNewline $tagDisplay -ForegroundColor Magenta
     Write-Host -NoNewline ' | ' -ForegroundColor DarkGray
+
+    if ($Status.HasPendingChanges -and $Status.IsUpdateAvailable) {
+        $pendingSummary = "Pending c:$($Status.ChangedFiles) u:$($Status.UntrackedFiles)"
+        Write-Host -NoNewline $pendingSummary -ForegroundColor Yellow
+        Write-Host -NoNewline ' | ' -ForegroundColor DarkGray
+        Write-Host $Status.UpdateSummary -ForegroundColor Red
+        return
+    }
+
     Write-Host $Status.Overview -ForegroundColor $overviewColor
 }
 
