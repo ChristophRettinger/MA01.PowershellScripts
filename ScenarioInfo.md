@@ -182,3 +182,10 @@ When the current commit is not directly tagged, the status column shows the most
 - Repository scripts that expose both `StartDate` and `EndDate` can also accept `Timespan` as an alternative end-bound.
 - `Timespan` accepts numeric minute values and PowerShell `TimeSpan` values.
 - If neither `EndDate` nor `Timespan` is supplied, a default 15-minute window is used from `StartDate`.
+
+## Orchestra log analysis notes
+
+`AnalyzeOrchestraLog` parses Orchestra server log entries and groups recurring warning/error statements across one or more log files.
+For grouping stability, the script supports a settings file with `regex;replacement` normalization rules that are applied before aggregation.
+The summary output tracks first/last occurrence, count, severity, flattened statement text, and the first stacktrace line.
+
