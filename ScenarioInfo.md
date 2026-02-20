@@ -178,6 +178,10 @@ This keeps local runtime files out of `git status` without requiring repository-
 Pending-change summaries show short counts for tracked (`c`) and untracked (`u`) files and now also show update availability when both states apply.
 When the current commit is not directly tagged, the status column shows the most recent reachable tag in parentheses.
 
+## Elastic export script notes
+
+`Write-ElasticDataToDatabase` reads paged Elasticsearch results via the shared helper and stores selected SUBFL process/business-key fields in SQL Server. The SQL companion file creates `[dbo].[ElasticData]` with both text and XML storage for `BK.SUBFL_subid_list` to support future query scenarios.
+
 ## Script parameter conventions
 - Repository scripts that expose both `StartDate` and `EndDate` can also accept `Timespan` as an alternative end-bound.
 - `Timespan` accepts numeric minute values and PowerShell `TimeSpan` values.

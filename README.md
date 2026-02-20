@@ -21,10 +21,11 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 - **Validate-Scenarios.ps1** - Validates scenario folders (including a direct path to a single scenario folder) or PSC archives with optional mode/category/name filters, shows validation progress, and can write a text report; derives channel strategy from `numberOfInstances`, skips ST checks for selected channel root types, and allows sequential channel/mapping strategy when all process models in a scenario are sequential (ignores non-XML PSC entries).
 - **Transfer-OperationData.ps1** - Transfers DataStore rows into OrchestraOperationData using resumable batches.
 - **Create-ProcessModelOverview.ps1** - Parses ProcessModell_* XML files and creates Markdown overviews for model metadata, variables, business keys, merged element detail rows (`Name`, `Type`, `Usage`, `Input Expression`, `Output Expression`), and gateway outgoing edge conditions (including EdgeSequence-based paths and else branches), writing reports to the script-local `Output` folder by default.
+- **Write-ElasticDataToDatabase.ps1** - Reads SUBFL Elasticsearch records for a date range and writes selected MSGID/process/business-key fields into SQL Server.
 
 ## Shared utilities
 
-- **Scripts/Common/ElasticSearchHelpers.ps1** - Hosts `Invoke-ElasticScrollSearch`, a reusable helper that issues scroll queries, aggregates all hits, surfaces detailed error information, and optionally reports page progress for callers. Scripts such as Process-MissingMedarchiv and Evaluate-OrchestraErrorsViaElastic dot-source this file to keep Elasticsearch pagination logic consistent.
+- **Scripts/Common/ElasticSearchHelpers.ps1** - Hosts `Invoke-ElasticScrollSearch`, a reusable helper that issues scroll queries, aggregates all hits, surfaces detailed error information, and optionally reports page progress for callers. Scripts such as Process-MissingMedarchiv, Evaluate-OrchestraErrorsViaElastic, and Write-ElasticDataToDatabase dot-source this file to keep Elasticsearch pagination logic consistent.
 
 ## Documentation references
 
