@@ -44,3 +44,17 @@ The different CASENO values (`BK._CASENO`, `BK._CASENO_BC`, and `BK._CASENO_ISH`
 - SUBFL scripts in this repository that expose `StartDate`/`EndDate` also accept `Timespan` as an alternative to `EndDate`.
 - `Timespan` supports either a numeric minute value or a PowerShell `TimeSpan` input.
 - If neither `EndDate` nor `Timespan` is provided, the scripts apply a default range of 15 minutes from `StartDate`.
+
+## SQL export field set
+
+`Write-ElasticDataToDatabase` exports a subset of SUBFL fields into SQL Server for downstream analysis:
+
+- `MSGID` (fallback: `BusinessCaseId`)
+- `ScenarioName`
+- `ProcessName`
+- `@timestamp` (stored as `ProcesssStarted`)
+- `BK.SUBFL_category`
+- `BK.SUBFL_subcategory`
+- `BK._HCMMSGEVENT`
+- `BK.SUBFL_subid`
+- `BK.SUBFL_subid_list` (stored both as comma-separated text and as XML `<subids><subid>...</subid></subids>`)
