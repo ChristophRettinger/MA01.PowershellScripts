@@ -21,7 +21,7 @@
     Optional Orchestra instance filter.
 
 .PARAMETER ScenarioName
-    ScenarioName wildcard filter (for example SUBFL*).
+    ScenarioName wildcard filter. Defaults to *SUBFL*.
 
 .PARAMETER Database
     SQL Server target database name. Defaults to ElasticData.
@@ -39,7 +39,7 @@
     Optional path to a file containing the Elasticsearch API key.
 
 .EXAMPLE
-    ./Write-ElasticDataToDatabase.ps1 -StartDate (Get-Date).Date -EndDate (Get-Date) -ScenarioName 'SUBFL*'
+    ./Write-ElasticDataToDatabase.ps1 -StartDate (Get-Date).Date -EndDate (Get-Date)
 #>
 param(
     [Parameter(Mandatory=$true)]
@@ -51,8 +51,8 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$Instance,
 
-    [Parameter(Mandatory=$true)]
-    [string]$ScenarioName,
+    [Parameter(Mandatory=$false)]
+    [string]$ScenarioName = '*SUBFL*',
 
     [Parameter(Mandatory=$false)]
     [string]$Database = 'ElasticData',
@@ -144,6 +144,7 @@ $body = @{
         'MSGID',
         'ScenarioName',
         'ProcessName',
+        'BK.SUBFL_changeart',
         'BK.SUBFL_category',
         'BK.SUBFL_subcategory',
         'BK._HCMMSGEVENT',
@@ -174,6 +175,7 @@ $null = $table.Columns.Add('MSGID', [string])
 $null = $table.Columns.Add('ScenarioName', [string])
 $null = $table.Columns.Add('ProcessName', [string])
 $null = $table.Columns.Add('ProcesssStarted', [string])
+$null = $table.Columns.Add('BK_SUBFL_changeart', [string])
 $null = $table.Columns.Add('BK_SUBFL_category', [string])
 $null = $table.Columns.Add('BK_SUBFL_subcategory', [string])
 $null = $table.Columns.Add('BK_HCMMSGEVENT', [string])
@@ -194,6 +196,7 @@ for ($index = 0; $index -lt $totalHits; $index++) {
     $scenario = ConvertTo-StringValue (Get-ElasticSourceValue -Source $source -FieldPath 'ScenarioName')
     $processName = ConvertTo-StringValue (Get-ElasticSourceValue -Source $source -FieldPath 'ProcessName')
     $processStarted = ConvertTo-StringValue (Get-ElasticSourceValue -Source $source -FieldPath '@timestamp')
+    $changeArt = ConvertTo-StringValue (Get-ElasticSourceValue -Source $source -FieldPath 'BK.SUBFL_changeart')
     $category = ConvertTo-StringValue (Get-ElasticSourceValue -Source $source -FieldPath 'BK.SUBFL_category')
     $subCategory = ConvertTo-StringValue (Get-ElasticSourceValue -Source $source -FieldPath 'BK.SUBFL_subcategory')
     $hcmMsgEvent = ConvertTo-StringValue (Get-ElasticSourceValue -Source $source -FieldPath 'BK._HCMMSGEVENT')
@@ -208,6 +211,7 @@ for ($index = 0; $index -lt $totalHits; $index++) {
     $row['ScenarioName'] = $scenario
     $row['ProcessName'] = $processName
     $row['ProcesssStarted'] = $processStarted
+    $row['BK_SUBFL_changeart'] = $changeArt
     $row['BK_SUBFL_category'] = $category
     $row['BK_SUBFL_subcategory'] = $subCategory
     $row['BK_HCMMSGEVENT'] = $hcmMsgEvent

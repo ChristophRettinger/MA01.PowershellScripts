@@ -180,7 +180,7 @@ When the current commit is not directly tagged, the status column shows the most
 
 ## Elastic export script notes
 
-`Write-ElasticDataToDatabase` reads paged Elasticsearch results via the shared helper and stores selected SUBFL process/business-key fields in SQL Server. The SQL companion file creates `[dbo].[ElasticData]` with both text and XML storage for `BK.SUBFL_subid_list` to support future query scenarios.
+`Write-ElasticDataToDatabase` reads paged Elasticsearch results via the shared helper and stores selected SUBFL process/business-key fields in SQL Server. It defaults the ScenarioName wildcard to `*SUBFL*` and includes `BK.SUBFL_changeart` in the export. The SQL companion file creates `[dbo].[ElasticData]` with both text and XML storage for `BK.SUBFL_subid_list` to support future query scenarios.
 
 ## Script parameter conventions
 - Repository scripts that expose both `StartDate` and `EndDate` can also accept `Timespan` as an alternative end-bound.
