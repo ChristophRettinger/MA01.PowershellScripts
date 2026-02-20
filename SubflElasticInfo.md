@@ -53,6 +53,7 @@ The different CASENO values (`BK._CASENO`, `BK._CASENO_BC`, and `BK._CASENO_ISH`
 - `ScenarioName`
 - `ProcessName`
 - `@timestamp` (stored as `ProcesssStarted`)
+- `BK.SUBFL_changeart`
 - `BK.SUBFL_category`
 - `BK.SUBFL_subcategory`
 - `BK._HCMMSGEVENT`

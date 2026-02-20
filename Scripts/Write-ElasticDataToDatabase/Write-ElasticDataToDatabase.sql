@@ -7,6 +7,7 @@ BEGIN
         [ScenarioName] NVARCHAR(400) NULL,
         [ProcessName] NVARCHAR(400) NULL,
         [ProcesssStarted] NVARCHAR(64) NULL,
+        [BK_SUBFL_changeart] NVARCHAR(200) NULL,
         [BK_SUBFL_category] NVARCHAR(200) NULL,
         [BK_SUBFL_subcategory] NVARCHAR(200) NULL,
         [BK_HCMMSGEVENT] NVARCHAR(200) NULL,
@@ -15,6 +16,13 @@ BEGIN
         [BK_SUBFL_subid_list_xml] XML NULL,
         CONSTRAINT [PK_ElasticData] PRIMARY KEY CLUSTERED ([Id] ASC)
     );
+END;
+GO
+
+IF COL_LENGTH('dbo.ElasticData', 'BK_SUBFL_changeart') IS NULL
+BEGIN
+    ALTER TABLE [dbo].[ElasticData]
+    ADD [BK_SUBFL_changeart] NVARCHAR(200) NULL;
 END;
 GO
 
