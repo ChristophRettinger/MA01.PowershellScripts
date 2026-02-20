@@ -21,10 +21,10 @@
     Severity levels to include in the result (for example WARNING, SEVERE, ERROR).
 
 .EXAMPLE
-    .\AnalyzeOrchestraLog.ps1 -LogPath ".\server.log"
+    .\Analyze-OrchestraLog.ps1 -LogPath ".\server.log"
 
 .EXAMPLE
-    .\AnalyzeOrchestraLog.ps1 -LogPath ".\logs\*.log" -OutputDirectory ".\out" -SettingsFile ".\normalize.txt"
+    .\Analyze-OrchestraLog.ps1 -LogPath ".\logs\*.log" -OutputDirectory ".\out" -SettingsFile ".\normalize.txt"
 #>
 [CmdletBinding()]
 param (
@@ -308,8 +308,8 @@ if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
     New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
     $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-    $csvPath = Join-Path -Path $OutputDirectory -ChildPath "AnalyzeOrchestraLog_$($stamp).csv"
-    $txtPath = Join-Path -Path $OutputDirectory -ChildPath "AnalyzeOrchestraLog_$($stamp).txt"
+    $csvPath = Join-Path -Path $OutputDirectory -ChildPath "Analyze-OrchestraLog_$($stamp).csv"
+    $txtPath = Join-Path -Path $OutputDirectory -ChildPath "Analyze-OrchestraLog_$($stamp).txt"
 
     $summary | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
     $summary | Format-Table -AutoSize | Out-String | Set-Content -Path $txtPath -Encoding UTF8

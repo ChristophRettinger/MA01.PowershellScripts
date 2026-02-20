@@ -185,7 +185,7 @@ When the current commit is not directly tagged, the status column shows the most
 
 ## Orchestra log analysis notes
 
-`AnalyzeOrchestraLog` parses Orchestra server log entries and groups recurring warning/error statements across one or more log files.
+`Analyze-OrchestraLog` parses Orchestra server log entries and groups recurring warning/error statements across one or more log files.
 For grouping stability, the script supports a settings file with `regex;replacement` normalization rules that are applied before aggregation.
 The summary output tracks first/last occurrence, count, severity, flattened statement text, and the first stacktrace line.
 

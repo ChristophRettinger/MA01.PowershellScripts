@@ -8,7 +8,7 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 
 - **Add-HostNames.ps1** - Resolves IP addresses from a CSV file to host names and writes the enriched CSV.
 - **Analyze-RagMetadata.ps1** - Summarizes RAG usage metadata from JSON and reports statistics plus field frequencies.
-- **AnalyzeOrchestraLog.ps1** - Parses Orchestra log files, groups warning/error entries, summarizes first/last occurrence and count, and supports regex-based normalization rules for grouping.
+- **Analyze-OrchestraLog.ps1** - Parses Orchestra log files, groups warning/error entries, summarizes first/last occurrence and count, and supports regex-based normalization rules for grouping.
 - **Extract-ChatProperties.ps1** - Selects specific chat metadata fields and outputs a simplified JSON file.
 - **Start-HttpListener.ps1** - Runs a lightweight HTTP/HTTPS listener that logs inbound requests.
 - **Test-Connections.ps1** - Checks TCP connectivity for CSV-listed hosts and records results with resolved IPs.
