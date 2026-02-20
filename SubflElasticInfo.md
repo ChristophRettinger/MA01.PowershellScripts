@@ -59,3 +59,5 @@ The different CASENO values (`BK._CASENO`, `BK._CASENO_BC`, and `BK._CASENO_ISH`
 - `BK._HCMMSGEVENT`
 - `BK.SUBFL_subid`
 - `BK.SUBFL_subid_list` (stored both as comma-separated text and as XML `<subids><subid>...</subid></subids>`)
+
+For downstream completeness checks, use `Scripts/Write-ElasticDataToDatabase/Write-ElasticDataToDatabase.MissingProcesses.sql` to identify MSGIDs with no outputs and MSGIDs with only partial outputs compared to `BK_SUBFL_subid_list`.
