@@ -138,6 +138,12 @@ function Get-RepositoryStatus {
     )
 
     $repoName = Split-Path -Path $RepositoryPath -Leaf
+    $lastCommitDate = (& git -C $RepositoryPath log -1 --date=format:'%Y-%m-%d %H:%M:%S' --format=%cd HEAD 2>$null)
+    $lastCommitDate = "$($lastCommitDate)".Trim()
+    if ([string]::IsNullOrWhiteSpace($lastCommitDate)) {
+        $lastCommitDate = '-'
+    }
+
     $exactTag = (& git -C $RepositoryPath describe --tags --exact-match 2>$null)
     $tag = "$($exactTag)".Trim()
     if ([string]::IsNullOrWhiteSpace($tag)) {
@@ -174,6 +180,7 @@ function Get-RepositoryStatus {
 
     $updateSummary = ''
     $isUpdateAvailable = $false
+    $availableCommitDate = ''
 
     if (-not [string]::IsNullOrWhiteSpace($upstream)) {
         $aheadBehind = (& git -C $RepositoryPath rev-list --left-right --count 'HEAD...@{u}' 2>$null)
@@ -187,7 +194,8 @@ function Get-RepositoryStatus {
 
                 if ($behindCount -gt 0) {
                     $isUpdateAvailable = $true
-                    $updateSummary = "Update available ($(Get-UpstreamVersionLabel -RepositoryPath $RepositoryPath -Reference $upstream))"
+                    $availableCommitDate = Get-CommitDate -RepositoryPath $RepositoryPath -Reference $upstream
+                    $updateSummary = "Update available ($(Get-UpstreamVersionLabel -RepositoryPath $RepositoryPath -Reference $upstream), $($availableCommitDate))"
                 }
             }
         }
@@ -209,6 +217,7 @@ function Get-RepositoryStatus {
 
     return [PSCustomObject]@{
         Name = $repoName
+        LastCommitDate = $lastCommitDate
         Tag = $tag.Trim()
         Overview = $overview
         HasPendingChanges = $hasPendingChanges
@@ -216,8 +225,27 @@ function Get-RepositoryStatus {
         UntrackedFiles = $untrackedFiles
         IsUpdateAvailable = $isUpdateAvailable
         UpdateSummary = $updateSummary
+        AvailableCommitDate = $availableCommitDate
         Upstream = if ([string]::IsNullOrWhiteSpace($upstream)) { '' } else { $upstream.Trim() }
     }
+}
+
+function Get-CommitDate {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Reference
+    )
+
+    $commitDate = (& git -C $RepositoryPath log -1 --date=format:'%Y-%m-%d %H:%M:%S' --format=%cd $Reference 2>$null)
+    $commitDate = "$($commitDate)".Trim()
+    if ([string]::IsNullOrWhiteSpace($commitDate)) {
+        return 'unknown-date'
+    }
+
+    return $commitDate
 }
 
 function Get-UpstreamVersionLabel {
@@ -312,9 +340,12 @@ function Write-RepositoryStatusLine {
     }
 
     $repoDisplay = '{0,-60}' -f $Status.Name
+    $lastCommitDisplay = '{0,-19}' -f $Status.LastCommitDate
     $tagDisplay = '{0,-22}' -f $Status.Tag
 
     Write-Host -NoNewline $repoDisplay -ForegroundColor Cyan
+    Write-Host -NoNewline ' | ' -ForegroundColor DarkGray
+    Write-Host -NoNewline $lastCommitDisplay -ForegroundColor DarkCyan
     Write-Host -NoNewline ' | ' -ForegroundColor DarkGray
     Write-Host -NoNewline $tagDisplay -ForegroundColor Magenta
     Write-Host -NoNewline ' | ' -ForegroundColor DarkGray
@@ -337,8 +368,9 @@ function Get-OutputStatusLine {
     )
 
     $repoDisplay = '{0,-60}' -f $Status.Name
+    $lastCommitDisplay = '{0,-19}' -f $Status.LastCommitDate
     $tagDisplay = '{0,-22}' -f $Status.Tag
-    return "$($repoDisplay) | $($tagDisplay) | $($Status.Overview)"
+    return "$($repoDisplay) | $($lastCommitDisplay) | $($tagDisplay) | $($Status.Overview)"
 }
 
 $repositoryRoots = Resolve-RepositoryRoots -RootPath $Path
