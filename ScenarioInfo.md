@@ -194,3 +194,7 @@ When the current commit is not directly tagged, the status column shows the most
 For grouping stability, the script supports a settings file with `regex;replacement` normalization rules that are applied before aggregation.
 The summary output tracks first/last occurrence, count, severity, flattened statement text, and the first stacktrace line.
 
+## Elastic resend operation notes
+
+`Resend-FromElastic` supports operational SUBFL replay workflows by querying Elasticsearch with stage/category/MSGID filters and replaying payloads in batch, all-at-once, or interactive single-step mode with keyboard controls (P/R/S/X). It can perform dry-run validation via `Action Test`, writes timestamped success/error logs, and can emit SourceInfo subscription filters through `TargetParty` and `TargetSubId`.
+

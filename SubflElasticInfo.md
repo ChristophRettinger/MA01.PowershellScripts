@@ -61,3 +61,7 @@ The different CASENO values (`BK._CASENO`, `BK._CASENO_BC`, and `BK._CASENO_ISH`
 - `BK.SUBFL_subid_list` (stored both as comma-separated text and as XML `<subids><subid>...</subid></subids>`)
 
 For downstream completeness checks, use `Scripts/Write-ElasticDataToDatabase/Write-ElasticDataToDatabase.MissingProcesses.sql` to identify MSGIDs with no outputs and MSGIDs with only partial outputs compared to `BK_SUBFL_subid_list`.
+
+## Elastic resend script notes
+
+`Resend-FromElastic` queries SUBFL records through `Invoke-ElasticScrollSearch` and can either summarize result ranges per `ScenarioName` or prepare/send replay requests to HTTP targets defined in a local CSV. For replay, it sends `MessageData1` as UTF-8 body, derives `SourceInfoMsg` from `MessageData2` when available, adds optional `SubscriptionFilterParty`/`SubscriptionFilterId` elements from `TargetParty` and `TargetSubId`, and builds `BuKeysString` from `BK.*` fields except SUBFL control keys.
