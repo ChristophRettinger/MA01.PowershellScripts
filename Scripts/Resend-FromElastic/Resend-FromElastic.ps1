@@ -67,7 +67,7 @@
     Query, Send, or Test. Defaults to Query.
 
 .PARAMETER Target
-    Target name resolved from targets.csv (columns Name,URL,Port).
+    Target name resolved from targets.csv (columns Name,URL); supports tab completion from Name values.
 
 .PARAMETER BatchSize
     Number of records processed per batch. Defaults to 100.
@@ -153,6 +153,24 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$Action = 'Query',
 
+    [ArgumentCompleter({
+        param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+
+        $targetsPath = Join-Path -Path $PSScriptRoot -ChildPath 'targets.csv'
+        if (-not (Test-Path -Path $targetsPath)) {
+            return
+        }
+
+        Import-Csv -Path $targetsPath |
+            Where-Object {
+                -not [string]::IsNullOrWhiteSpace($_.Name) -and
+                $_.Name -like "${wordToComplete}*"
+            } |
+            Select-Object -ExpandProperty Name -Unique |
+            ForEach-Object {
+                [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+            }
+    })]
     [Parameter(Mandatory=$false)]
     [string]$Target,
 
@@ -255,10 +273,6 @@ function Resolve-TargetDefinition {
     }
 
     $url = $match.URL.Trim()
-    if ($match.Port) {
-        return "${url}:$($match.Port)"
-    }
-
     return $url
 }
 
