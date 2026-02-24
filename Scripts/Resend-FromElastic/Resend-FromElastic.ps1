@@ -541,7 +541,6 @@ $termFilters = @(
     (ConvertTo-ElasticTermsFilter -Field 'BK._CASENO_ISH' -Values $CaseNo),
     (ConvertTo-ElasticTermsFilter -Field 'BK._PID' -Values $PatientId),
     (ConvertTo-ElasticTermsFilter -Field 'BK._PID_ISH' -Values $PatientId),
-    (ConvertTo-ElasticTermsFilter -Field 'MSGID' -Values $BusinessCaseId),
     (ConvertTo-ElasticTermsFilter -Field 'BusinessCaseId' -Values $BusinessCaseId),
     (ConvertTo-ElasticTermsFilter -Field 'BK.SUBFL_category' -Values $Category),
     (ConvertTo-ElasticTermsFilter -Field 'BK.SUBFL_subcategory' -Values $Subcategory),
@@ -556,7 +555,7 @@ foreach ($filter in $termFilters) {
             # handled below through should clause
         } elseif ($filter.terms.ContainsKey('BK._PID') -or $filter.terms.ContainsKey('BK._PID_ISH')) {
             # handled below through should clause
-        } elseif ($filter.terms.ContainsKey('MSGID') -or $filter.terms.ContainsKey('BusinessCaseId')) {
+        } elseif ($filter.terms.ContainsKey('BusinessCaseId')) {
             # handled below through should clause
         } else {
             $mustClauses += $filter
@@ -575,7 +574,6 @@ if ($PatientId -and $PatientId.Count -gt 0) {
     $shouldClauses += (ConvertTo-ElasticTermsFilter -Field 'BK._PID_ISH' -Values $PatientId)
 }
 if ($BusinessCaseId -and $BusinessCaseId.Count -gt 0) {
-    $shouldClauses += (ConvertTo-ElasticTermsFilter -Field 'MSGID' -Values $BusinessCaseId)
     $shouldClauses += (ConvertTo-ElasticTermsFilter -Field 'BusinessCaseId' -Values $BusinessCaseId)
 }
 $shouldClauses = @($shouldClauses | Where-Object { $_ })
