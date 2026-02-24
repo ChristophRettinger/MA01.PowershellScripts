@@ -196,5 +196,5 @@ The summary output tracks first/last occurrence, count, severity, flattened stat
 
 ## Elastic resend operation notes
 
-`Resend-FromElastic` supports operational SUBFL replay workflows by querying Elasticsearch with stage/category/MSGID filters and replaying payloads in batch, all-at-once, or interactive single-step mode with keyboard controls (P/R/S/X). It can perform dry-run validation via `Action Test`, writes timestamped success/error logs, and can emit SourceInfo subscription filters through `TargetParty` and `TargetSubId`.
+`Resend-FromElastic` supports operational SUBFL replay workflows by querying Elasticsearch with stage/category/MSGID filters and replaying payloads in batch, all-at-once, or interactive single-step mode with keyboard controls (P/R/S/X). It can perform dry-run validation via `Action Test`, writes timestamped success/error logs, reads resend endpoint definitions from `targets.csv`, tab-completes `Target` values from CSV `Name` entries, and can emit SourceInfo subscription filters through `TargetParty` and `TargetSubId`.
 

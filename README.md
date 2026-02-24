@@ -22,7 +22,7 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 - **Transfer-OperationData.ps1** - Transfers DataStore rows into OrchestraOperationData using resumable batches.
 - **Create-ProcessModelOverview.ps1** - Parses ProcessModell_* XML files and creates Markdown overviews for model metadata, variables, business keys, merged element detail rows (`Name`, `Type`, `Usage`, `Input Expression`, `Output Expression`), and gateway outgoing edge conditions (including EdgeSequence-based paths and else branches), writing reports to the script-local `Output` folder by default.
 - **Write-ElasticDataToDatabase.ps1** - Reads SUBFL Elasticsearch records for a date range and writes selected MSGID/process/business-key fields (including change type) into SQL Server. Includes SQL templates for table creation and missing-output checks by MSGID/subid.
-- **Resend-FromElastic.ps1** - Queries SUBFL records from Elasticsearch with flexible filters and supports grouped query reporting or controlled resend/test replay to configured HTTP targets.
+- **Resend-FromElastic.ps1** - Queries SUBFL records from Elasticsearch with flexible filters, offers grouped query reporting or controlled resend/test replay to configured HTTP targets, and tab-completes target names from `targets.csv`.
 
 ## Shared utilities
 

@@ -1,2 +1,2 @@
-Name,URL,Port
-PROD02-WSK,http://localhost,8080
+Name,URL
+PROD02-WSK,http://localhost:8080
