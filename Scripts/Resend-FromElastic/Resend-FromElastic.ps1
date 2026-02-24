@@ -39,7 +39,7 @@
 .PARAMETER CaseNo
     Array filter for case numbers.
 
-.PARAMETER PID
+.PARAMETER PatientId
     Array filter for patient IDs.
 
 .PARAMETER BusinessCaseId
@@ -124,7 +124,7 @@ param(
     [string[]]$CaseNo,
 
     [Parameter(Mandatory=$false)]
-    [string[]]$PID,
+    [string[]]$PatientId,
 
     [Alias('MSGID')]
     [Parameter(Mandatory=$false)]
@@ -423,7 +423,7 @@ if ($BusinessCaseId -and -not $PSBoundParameters.ContainsKey('Stage')) {
 $effectiveFilterCount = 0
 if (-not [string]::IsNullOrWhiteSpace($ScenarioName)) { $effectiveFilterCount++ }
 if (-not [string]::IsNullOrWhiteSpace($ProcessName)) { $effectiveFilterCount++ }
-foreach ($arr in @($CaseNo,$PID,$BusinessCaseId,$Category,$Subcategory,$HcmMsgEvent,$Instance,$Environment)) {
+foreach ($arr in @($CaseNo,$PatientId,$BusinessCaseId,$Category,$Subcategory,$HcmMsgEvent,$Instance,$Environment)) {
     if ($arr -and @($arr | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") }).Count -gt 0) { $effectiveFilterCount++ }
 }
 if ($Stage) { $effectiveFilterCount++ }
@@ -463,8 +463,8 @@ $termFilters = @(
     (ConvertTo-ElasticTermsFilter -Field 'BK._CASENO' -Values $CaseNo),
     (ConvertTo-ElasticTermsFilter -Field 'BK._CASENO_BC' -Values $CaseNo),
     (ConvertTo-ElasticTermsFilter -Field 'BK._CASENO_ISH' -Values $CaseNo),
-    (ConvertTo-ElasticTermsFilter -Field 'BK._PID' -Values $PID),
-    (ConvertTo-ElasticTermsFilter -Field 'BK._PID_ISH' -Values $PID),
+    (ConvertTo-ElasticTermsFilter -Field 'BK._PID' -Values $PatientId),
+    (ConvertTo-ElasticTermsFilter -Field 'BK._PID_ISH' -Values $PatientId),
     (ConvertTo-ElasticTermsFilter -Field 'MSGID' -Values $BusinessCaseId),
     (ConvertTo-ElasticTermsFilter -Field 'BusinessCaseId' -Values $BusinessCaseId),
     (ConvertTo-ElasticTermsFilter -Field 'BK.SUBFL_category' -Values $Category),
@@ -494,9 +494,9 @@ if ($CaseNo -and $CaseNo.Count -gt 0) {
     $shouldClauses += (ConvertTo-ElasticTermsFilter -Field 'BK._CASENO_BC' -Values $CaseNo)
     $shouldClauses += (ConvertTo-ElasticTermsFilter -Field 'BK._CASENO_ISH' -Values $CaseNo)
 }
-if ($PID -and $PID.Count -gt 0) {
-    $shouldClauses += (ConvertTo-ElasticTermsFilter -Field 'BK._PID' -Values $PID)
-    $shouldClauses += (ConvertTo-ElasticTermsFilter -Field 'BK._PID_ISH' -Values $PID)
+if ($PatientId -and $PatientId.Count -gt 0) {
+    $shouldClauses += (ConvertTo-ElasticTermsFilter -Field 'BK._PID' -Values $PatientId)
+    $shouldClauses += (ConvertTo-ElasticTermsFilter -Field 'BK._PID_ISH' -Values $PatientId)
 }
 if ($BusinessCaseId -and $BusinessCaseId.Count -gt 0) {
     $shouldClauses += (ConvertTo-ElasticTermsFilter -Field 'MSGID' -Values $BusinessCaseId)
