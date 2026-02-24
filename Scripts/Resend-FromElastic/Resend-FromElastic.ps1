@@ -368,13 +368,12 @@ function ConvertTo-BusinessKeysString {
     param([object]$Source)
 
     $excludedKeys = @(
-        'BK.SUBFL_stage','BK.SUBFL_party','BK.SUBFL_name','BK.SUBFL_history','BK.SUBFL_subid',
-        'BK.SUBFL_subid_list','BK.SUBFL_targetid','BK.SUBFL_workflow','BK.SUBFL_senddate'
+        'SUBFL_stage','SUBFL_party','SUBFL_name','SUBFL_history','SUBFL_subid',
+        'SUBFL_subid_list','SUBFL_targetid','SUBFL_workflow','SUBFL_senddate'
     )
 
     $parts = [System.Collections.Generic.List[string]]::new()
-    foreach ($prop in $Source.PSObject.Properties) {
-        if ($prop.Name -notlike 'BK.*') { continue }
+    foreach ($prop in $Source.BK.PSObject.Properties) {
         if ($excludedKeys -contains $prop.Name) { continue }
 
         $value = if ($null -eq $prop.Value) { '' } else { "$($prop.Value)" }
@@ -382,7 +381,7 @@ function ConvertTo-BusinessKeysString {
     }
 
     $businessKeysRaw = ($parts -join '|').Replace('&colon;', ':').Replace('&pipe;', '|')
-    $base64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($businessKeysRaw))
+	$base64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($businessKeysRaw))
     return [System.Net.WebUtility]::UrlEncode($base64)
 }
 
