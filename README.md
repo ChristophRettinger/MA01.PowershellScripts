@@ -32,6 +32,7 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 
 - **SubflElasticInfo.md** - Overview of Subscription Flow (SUBFL) terminology plus how SUBFL scenarios log to Elasticsearch, including the specific fields and filters leveraged by the SUBFL-related scripts in this repository.
 - **ScenarioInfo.md** - Reference for Orchestra scenario folder structure, including expected file naming patterns and scenario-related configuration notes drawn from the scripts.
+- **Scripts/Validate-Scenarios/Validate-Scenarios.md** - German usage documentation for Validate-Scenarios, including defaults, exception handling, and review intent.
 
 ## Shared date-range behavior
 

@@ -161,6 +161,10 @@ When the script finds a non-default configuration that matches an exception code
 
 Validation now reports progress while scanning folder files and PSC archive entries.
 
+## Dedicated script usage documentation
+
+A dedicated German usage page for `Validate-Scenarios` is maintained next to the script at `Scripts/Validate-Scenarios/Validate-Scenarios.md`. It describes operational intent, default values, allowed alternatives, and exception documentation workflow for Confluence reuse.
+
 ## Orchestra git working copy notes
 
 Orchestra scenario working copies often contain local machine artifacts that should stay untracked.
