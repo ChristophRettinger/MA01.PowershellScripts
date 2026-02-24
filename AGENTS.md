@@ -12,6 +12,7 @@
 - Whenever `ElasticSearchHelpers.ps1` changes, review every script that dot-sources it (currently `Evaluate-OrchestraErrorsViaElastic` and `Process-MissingMedarchiv`) and update them to keep behaviour and parameters aligned. Add new scripts to this list when they start using the helper.
 - When filtering for ScenarioName do not use "ScenarioName.keyword", just plain "ScenarioName"
 - Use MSGID as shorthand for BusinessCaseId 
+- Never define script parameters or local variables named `PID`; PowerShell reserves `$PID` as a read-only automatic variable. Use `PatientId` for script parameters and internal variables instead.
 
 ## PowerShell Variable Interpolation
 
