@@ -264,7 +264,7 @@ function Get-UpstreamVersionLabel {
     }
 
     $tag = (& git -C $RepositoryPath describe --tags --exact-match $Reference 2>$null)
-    $tag = $tag.Trim()
+    $tag = (""+$tag).Trim()
 
     if ([string]::IsNullOrWhiteSpace($tag)) {
         return $shortHash
