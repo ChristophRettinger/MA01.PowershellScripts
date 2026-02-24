@@ -397,7 +397,7 @@ function Cleanup-EnvelopeData {
         $doc = [System.Xml.Linq.XDocument]::Parse($XmlText)
         if ($doc.Root -and $doc.Root.Name.LocalName -eq 'Envelope') {
             $toRemove = @($doc.Root.Elements() | Where-Object {
-                $_.Name.LocalName -eq 'Data' -and "$($_.Attribute('src'))" -ne 'Input'
+                $_.Name.LocalName -eq 'Data' -and "$($_.Attribute('src').Value)" -ne 'Input'
             })
             foreach ($node in $toRemove) {
                 $node.Remove()
