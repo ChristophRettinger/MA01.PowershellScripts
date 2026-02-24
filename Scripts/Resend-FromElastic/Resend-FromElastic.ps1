@@ -222,7 +222,13 @@ function Write-RunLog {
 
     $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff')
     $line = "[$stamp] [$Level] $Message"
-    Write-Host $line
+    $levelColor = switch ($Level) {
+        'ERROR' { 'Red'; break }
+        'WARN' { 'Yellow'; break }
+        default { 'Gray'; break }
+    }
+
+    Write-Host $line -ForegroundColor $levelColor
     if ($script:LogFilePath) {
         Add-Content -Path $script:LogFilePath -Value $line
     }
@@ -681,10 +687,10 @@ for ($i = 0; $i -lt $records.Count; $i++) {
 
 Write-Progress -Id 2 -Activity 'Resend processing' -Completed
 Write-Host ''
-Write-Host 'Successes:'
-$script:SuccessLog | ForEach-Object { Write-Host $_ }
+Write-Host 'Successes:' -ForegroundColor Green
+$script:SuccessLog | ForEach-Object { Write-Host $_ -ForegroundColor Green }
 Write-Host ''
-Write-Host 'Errors:'
-$script:ErrorLog | ForEach-Object { Write-Host $_ }
+Write-Host 'Errors:' -ForegroundColor Red
+$script:ErrorLog | ForEach-Object { Write-Host $_ -ForegroundColor Red }
 Write-Host ''
 Write-RunLog -Level 'INFO' -Message "Finished. Successes: $($script:SuccessLog.Count), Errors: $($script:ErrorLog.Count)."
