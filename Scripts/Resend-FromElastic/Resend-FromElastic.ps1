@@ -40,13 +40,13 @@
     ProcessName wildcard filter.
 
 .PARAMETER CaseNo
-    Array filter for case numbers.
+    Array filter for case numbers; accepts repeated or comma-separated values.
 
 .PARAMETER PatientId
-    Array filter for patient IDs.
+    Array filter for patient IDs; accepts repeated or comma-separated values.
 
 .PARAMETER BusinessCaseId
-    Array filter for MSGID/BusinessCaseId.
+    Array filter for MSGID/BusinessCaseId; accepts repeated or comma-separated values.
 
 .PARAMETER Stage
     BK.SUBFL_stage filter (Input, Map, Resolve, Output).
@@ -249,6 +249,32 @@ function ConvertTo-ElasticTermsFilter {
     }
 
     return @{ terms = @{ $Field = $items } }
+}
+
+function Normalize-FilterValues {
+    param(
+        [string[]]$Values
+    )
+
+    if (-not $Values) {
+        return @()
+    }
+
+    $normalized = [System.Collections.Generic.List[string]]::new()
+    foreach ($value in $Values) {
+        if ([string]::IsNullOrWhiteSpace("$value")) {
+            continue
+        }
+
+        foreach ($part in ("$value" -split ',')) {
+            $trimmed = $part.Trim()
+            if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+                $normalized.Add($trimmed)
+            }
+        }
+    }
+
+    return @($normalized | Select-Object -Unique)
 }
 
 function Resolve-ApiKey {
@@ -460,6 +486,15 @@ if ($StartDate -gt $EndDate) {
 if ($BusinessCaseId -and -not $PSBoundParameters.ContainsKey('Stage')) {
     $Stage = 'Input'
 }
+
+$CaseNo = Normalize-FilterValues -Values $CaseNo
+$PatientId = Normalize-FilterValues -Values $PatientId
+$BusinessCaseId = Normalize-FilterValues -Values $BusinessCaseId
+$Category = Normalize-FilterValues -Values $Category
+$Subcategory = Normalize-FilterValues -Values $Subcategory
+$HcmMsgEvent = Normalize-FilterValues -Values $HcmMsgEvent
+$Instance = Normalize-FilterValues -Values $Instance
+$Environment = Normalize-FilterValues -Values $Environment
 
 $effectiveFilterCount = 0
 if (-not [string]::IsNullOrWhiteSpace($ScenarioName)) { $effectiveFilterCount++ }
