@@ -46,7 +46,7 @@
     Array filter for patient IDs; accepts repeated or comma-separated values.
 
 .PARAMETER BusinessCaseId
-    Array filter for MSGID/BusinessCaseId; accepts repeated or comma-separated values.
+    Array filter for MSGID/BusinessCaseId; accepts repeated or comma-separated values and preserves leading zeros.
 
 .PARAMETER Stage
     BK.SUBFL_stage filter (Input, Map, Resolve, Output).
@@ -277,6 +277,44 @@ function Normalize-FilterValues {
     return @($normalized | Select-Object -Unique)
 }
 
+function Resolve-RawBusinessCaseIdsFromInvocation {
+    if (-not $PSBoundParameters.ContainsKey('BusinessCaseId')) {
+        return @()
+    }
+
+    $invocationLine = "$($MyInvocation.Line)"
+    if ([string]::IsNullOrWhiteSpace($invocationLine)) {
+        return @()
+    }
+
+    $match = [regex]::Match(
+        $invocationLine,
+        '(?is)-(?:BusinessCaseId|MSGID)\s+(?<values>.+?)(?=\s+-[A-Za-z][A-Za-z0-9]*\b|\s*$)'
+    )
+    if (-not $match.Success) {
+        return @()
+    }
+
+    $rawSegment = $match.Groups['values'].Value
+    $rawItems = [System.Collections.Generic.List[string]]::new()
+    foreach ($rawPart in ($rawSegment -split ',')) {
+        $trimmed = $rawPart.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) {
+            continue
+        }
+
+        if (($trimmed.StartsWith("'") -and $trimmed.EndsWith("'")) -or ($trimmed.StartsWith('"') -and $trimmed.EndsWith('"'))) {
+            $trimmed = $trimmed.Substring(1, $trimmed.Length - 2)
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+            $rawItems.Add($trimmed)
+        }
+    }
+
+    return @($rawItems)
+}
+
 function Resolve-ApiKey {
     if ($ElasticApiKey) {
         return $ElasticApiKey.Trim()
@@ -490,6 +528,10 @@ if ($BusinessCaseId -and -not $PSBoundParameters.ContainsKey('Stage')) {
 $CaseNo = Normalize-FilterValues -Values $CaseNo
 $PatientId = Normalize-FilterValues -Values $PatientId
 $BusinessCaseId = Normalize-FilterValues -Values $BusinessCaseId
+$rawBusinessCaseIds = Resolve-RawBusinessCaseIdsFromInvocation
+if ($rawBusinessCaseIds.Count -gt 0 -and $rawBusinessCaseIds.Count -eq $BusinessCaseId.Count) {
+    $BusinessCaseId = Normalize-FilterValues -Values $rawBusinessCaseIds
+}
 $Category = Normalize-FilterValues -Values $Category
 $Subcategory = Normalize-FilterValues -Values $Subcategory
 $HcmMsgEvent = Normalize-FilterValues -Values $HcmMsgEvent
