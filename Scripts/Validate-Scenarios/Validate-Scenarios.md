@@ -8,12 +8,11 @@ Das Script existiert, um **Abweichungen sichtbar zu machen**, **Ausnahmen expliz
 Damit unterstützt es konkret:
 
 - technische Konsistenz über alle Scenarios,
-- nachvollziehbare Exceptions direkt in XML `description`-Feldern,
-- schnellere Reviews bei Änderungen an `ProcessModell_*`, `Channel_*` und `MessageMapping_*`.
+- nachvollziehbare Ausnahmen direkt in `description`-Feldern.
 
-## Ablageort im Betrieb
+## Ablageort
 
-Der produktive Ablageort des Scripts ist:
+Der Ablageort des Scripts ist:
 
 `\\vsma01.host.magwien.gv.at\ma01gat\GAT2\_Tools\Powershell\Validate-Scenarios.ps1`
 
@@ -39,16 +38,15 @@ Prüfkategorien (`ErrorCategories`):
 
 `-Path` kann auf unterschiedliche Strukturen zeigen:
 
-- auf einen Root-Ordner mit vielen Scenario-Ordnern,
 - direkt auf **ein einzelnes Scenario-Verzeichnis**,
-- auf Strukturen mit **Sub-Sub-Foldern** innerhalb eines Scenarios (die relevanten XML-Dateien werden rekursiv gefunden).
+- auf einen Root-Ordner mit vielen Scenario-Ordnern, auch mit Unterordnern beliebiger Tief
 
 Zusätzlich kann über `-Filter` auf Scenario-Namen (Folder-Mode) oder PSC-Dateinamen (PSC-Mode) eingeschränkt werden.
 
 ## Standardwerte (Defaults), Bedeutung und Alternativen
 
-Die folgenden Default-Entscheidungen sind die Referenz für „in line“-Scenarios.
-Abweichungen sind möglich, müssen aber als Exception dokumentiert werden.
+Die folgenden Default-Entscheidungen sind die Referenz für alle Scenarios.
+Abweichungen sind möglich, müssen aber als Ausnahmen dokumentiert werden.
 
 ### Process Model
 
@@ -112,7 +110,7 @@ Hinweise zur Herleitung von `ST`:
 .\Scripts\Validate-Scenarios\Validate-Scenarios.ps1 -Path D:\Scenarios
 
 # Direkt ein einzelnes Scenario-Verzeichnis prüfen
-.\Scripts\Validate-Scenarios\Validate-Scenarios.ps1 -Path D:\Scenarios\SUBFL_Import
+.\Scripts\Validate-Scenarios\Validate-Scenarios.ps1 -Path D:\Scenarios\ITI_SUBFL_Sense_senden_4292
 
 # Nur BK und ST prüfen, BK-Limit auf 8
 .\Scripts\Validate-Scenarios\Validate-Scenarios.ps1 -Path D:\Scenarios -ErrorCategories BK,ST -MaxBusinessKeyCount 8
@@ -121,9 +119,9 @@ Hinweise zur Herleitung von `ST`:
 .\Scripts\Validate-Scenarios\Validate-Scenarios.ps1 -Path D:\Scenarios -Mode PSC
 ```
 
-## Exceptions bewusst dokumentieren
+## Ausnahmen bewusst dokumentieren
 
-Ausnahmen werden im `description`-Feld der jeweiligen XML-Datei hinterlegt, z. B.:
+Ausnahmen werden im `description`-Feld der jeweiligen Elementes hinterlegt, z. B.:
 
 `PM:v; RS:a; ST:s; BK:8`
 
@@ -145,6 +143,6 @@ Wichtig:
 
 ## Screenshots (Platzhalter)
 
-- [SCREENSHOT-1: Konsolen-Output ohne Exceptions]
+- [SCREENSHOT-1: Konsolen-Output]
 - [SCREENSHOT-2: Konsolen-Output mit `-ShowExceptions`]
 - [SCREENSHOT-3: Beispiel `description` mit Exception-Codes]
