@@ -213,6 +213,8 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
 }
 . $sharedHelpersPath
 
+Write-Host 'Key controls during processing: P=pause, R=resume/skip wait, S=single-step, X=stop.' -ForegroundColor Yellow
+
 $script:LogFilePath = $null
 $script:SuccessLog = [System.Collections.Generic.List[string]]::new()
 $script:ErrorLog = [System.Collections.Generic.List[string]]::new()
