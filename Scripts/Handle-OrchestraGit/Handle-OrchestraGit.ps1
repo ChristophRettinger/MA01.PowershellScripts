@@ -263,8 +263,17 @@ function Get-UpstreamVersionLabel {
         return 'unknown'
     }
 
-    $tag = (& git -C $RepositoryPath describe --tags --exact-match $Reference 2>$null)
-    $tag = (""+$tag).Trim()
+    $exactTag = (& git -C $RepositoryPath describe --tags --exact-match $Reference 2>$null)
+    $tag = ("" + $exactTag).Trim()
+
+    if ([string]::IsNullOrWhiteSpace($tag)) {
+        $latestTag = (& git -C $RepositoryPath describe --tags --abbrev=0 $Reference 2>$null)
+        $latestTag = ("" + $latestTag).Trim()
+
+        if (-not [string]::IsNullOrWhiteSpace($latestTag)) {
+            $tag = "$($latestTag)*"
+        }
+    }
 
     if ([string]::IsNullOrWhiteSpace($tag)) {
         return $shortHash
