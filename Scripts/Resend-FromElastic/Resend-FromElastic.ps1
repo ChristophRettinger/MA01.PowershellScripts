@@ -375,7 +375,7 @@ function ConvertTo-BusinessKeysString {
 
     $excludedKeys = @(
         'SUBFL_stage','SUBFL_party','SUBFL_name','SUBFL_history','SUBFL_subid',
-        'SUBFL_subid_list','SUBFL_targetid','SUBFL_workflow','SUBFL_senddate'
+        'SUBFL_subid_list','SUBFL_targetid','SUBFL_workflow','SUBFL_senddate','_INSTITUTION_LONG'
     )
 
     $parts = [System.Collections.Generic.List[string]]::new()
@@ -637,16 +637,16 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     try {
         if ($Action -eq 'Send') {
             Invoke-RestMethod -Method Post -Uri $targetUri -Headers $headersOut -Body $messageData1 -ContentType 'text/xml; charset=utf-8' -TimeoutSec 120 | Out-Null
-            $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') | OK | #$indexDisplay | MSGID=$msgId | Scenario=$scenario | Timestamp=$recordStamp"
+            $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') | OK    | #$indexDisplay | $msgId | $scenario | TS $recordStamp"
             $script:SuccessLog.Add($line) | Out-Null
             Write-RunLog -Level 'INFO' -Message $line
         } else {
-            $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') | TEST | #$indexDisplay | MSGID=$msgId | Scenario=$scenario | Timestamp=$recordStamp"
+            $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') | TEST  | #$indexDisplay | $msgId | $scenario | TS $recordStamp"
             $script:SuccessLog.Add($line) | Out-Null
             Write-RunLog -Level 'INFO' -Message $line
         }
     } catch {
-        $err = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') | ERROR | #$indexDisplay | MSGID=$msgId | $($_.Exception.Message)"
+        $err = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') | ERROR | #$indexDisplay | $msgId | $($_.Exception.Message)"
         $script:ErrorLog.Add($err) | Out-Null
         Write-RunLog -Level 'ERROR' -Message $err
     }
@@ -686,11 +686,15 @@ for ($i = 0; $i -lt $records.Count; $i++) {
 }
 
 Write-Progress -Id 2 -Activity 'Resend processing' -Completed
-Write-Host ''
-Write-Host 'Successes:' -ForegroundColor Green
-$script:SuccessLog | ForEach-Object { Write-Host $_ -ForegroundColor Green }
-Write-Host ''
-Write-Host 'Errors:' -ForegroundColor Red
-$script:ErrorLog | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+if ($script:SuccessLog) {
+	Write-Host ''
+	Write-Host 'Successes:' -ForegroundColor Green
+	$script:SuccessLog | ForEach-Object { Write-Host $_ -ForegroundColor Green }
+}
+if ($script:ErrorLog) {
+	Write-Host ''
+	Write-Host 'Errors:' -ForegroundColor Red
+	$script:ErrorLog | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+}
 Write-Host ''
 Write-RunLog -Level 'INFO' -Message "Finished. Successes: $($script:SuccessLog.Count), Errors: $($script:ErrorLog.Count)."
