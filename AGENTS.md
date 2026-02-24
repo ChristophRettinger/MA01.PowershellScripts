@@ -20,4 +20,9 @@
   When a variable is followed immediately by characters like :, ., -, [, etc., always wrap the variable using sub-expression syntax:
   $($x): 1
   This applies especially inside hash literals and interpolated strings. Always use $($var) when the parser would otherwise misinterpret the variable boundary.
+
+## Basic script validation
+
+- Always run a basic PowerShell command check after script updates to catch syntax issues early, for example:
+  `pwsh -NoProfile -Command "Get-Command ./Scripts/Resend-FromElastic/Resend-FromElastic.ps1 | Out-Null; 'ok'"`
   
