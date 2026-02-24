@@ -15,6 +15,9 @@
     supports envelope cleanup, batching, delay handling, single-step mode, and
     keyboard controls (P pause, R resume/skip wait, S single-step, X exit).
 
+    When multiple records share the same BusinessCaseId/MSGID, only the oldest
+    record (lowest @timestamp) is kept for processing.
+
 .PARAMETER StartDate
     Inclusive start timestamp for Elasticsearch filtering. Defaults to now minus 7 days.
 
@@ -284,6 +287,25 @@ function Resolve-ApiKey {
     }
 
     throw 'No Elasticsearch API key provided. Use ElasticApiKey or ElasticApiKeyPath.'
+}
+
+function Get-RecordBusinessCaseKey {
+    param(
+        [Parameter(Mandatory=$true)]
+        [psobject]$Source
+    )
+
+    $businessCaseValue = "$(Get-ElasticSourceValue -Source $Source -FieldPath 'BusinessCaseId')"
+    if (-not [string]::IsNullOrWhiteSpace($businessCaseValue)) {
+        return $businessCaseValue
+    }
+
+    $msgIdValue = "$(Get-ElasticSourceValue -Source $Source -FieldPath 'MSGID')"
+    if (-not [string]::IsNullOrWhiteSpace($msgIdValue)) {
+        return $msgIdValue
+    }
+
+    return $null
 }
 
 function Resolve-TargetDefinition {
@@ -583,7 +605,30 @@ $hits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Body $body -Headers 
 Write-Progress -Id 1 -Activity 'Elasticsearch query' -Completed
 
 $records = @($hits | ForEach-Object { $_._source } | Where-Object { $_ })
+$totalRecordsFromElastic = $records.Count
+
+$uniqueRecords = [System.Collections.Generic.List[object]]::new()
+$seenBusinessCaseIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+$duplicateBusinessCaseCount = 0
+foreach ($record in $records) {
+    $businessCaseKey = Get-RecordBusinessCaseKey -Source $record
+    if ([string]::IsNullOrWhiteSpace($businessCaseKey)) {
+        $uniqueRecords.Add($record) | Out-Null
+        continue
+    }
+
+    if ($seenBusinessCaseIds.Add($businessCaseKey)) {
+        $uniqueRecords.Add($record) | Out-Null
+    } else {
+        $duplicateBusinessCaseCount++
+    }
+}
+$records = @($uniqueRecords)
+
 Write-RunLog -Level 'INFO' -Message "Found $($records.Count) records."
+if ($duplicateBusinessCaseCount -gt 0) {
+    Write-RunLog -Level 'INFO' -Message "Ignored $duplicateBusinessCaseCount newer duplicate records by BusinessCaseId/MSGID (from $totalRecordsFromElastic total hits)."
+}
 
 if ($Action -eq 'Query') {
     $grouped = $records | Group-Object -Property ScenarioName | Sort-Object Name
