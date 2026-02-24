@@ -279,7 +279,7 @@ function Get-UpstreamVersionLabel {
         return $shortHash
     }
 
-    return "$($tag) $($shortHash)"
+    return "$($tag)"
 }
 
 function Invoke-RepositoryAction {
