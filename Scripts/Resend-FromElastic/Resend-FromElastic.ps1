@@ -277,11 +277,7 @@ function Normalize-FilterValues {
     return @($normalized | Select-Object -Unique)
 }
 
-function Resolve-RawBusinessCaseIdsFromInvocation {
-    if (-not $PSBoundParameters.ContainsKey('BusinessCaseId')) {
-        return @()
-    }
-
+function Resolve-RawBusinessCaseIdsFromInvocation ($MyInvocation) {
     $invocationLine = "$($MyInvocation.Line)"
     if ([string]::IsNullOrWhiteSpace($invocationLine)) {
         return @()
@@ -528,7 +524,7 @@ if ($BusinessCaseId -and -not $PSBoundParameters.ContainsKey('Stage')) {
 $CaseNo = Normalize-FilterValues -Values $CaseNo
 $PatientId = Normalize-FilterValues -Values $PatientId
 $BusinessCaseId = Normalize-FilterValues -Values $BusinessCaseId
-$rawBusinessCaseIds = Resolve-RawBusinessCaseIdsFromInvocation
+$rawBusinessCaseIds = Resolve-RawBusinessCaseIdsFromInvocation $MyInvocation
 if ($rawBusinessCaseIds.Count -gt 0 -and $rawBusinessCaseIds.Count -eq $BusinessCaseId.Count) {
     $BusinessCaseId = Normalize-FilterValues -Values $rawBusinessCaseIds
 }
