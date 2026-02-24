@@ -1,2 +1,9 @@
-Name,URL,Port
-PROD02-WSK,http://localhost,8080
+Name,URL
+WSK_DEV_01,https://dev01.esb.wienkav.at:8443/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
+WSK_PROD_01,https://prod01.esb.wienkav.at:8443/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
+WSK_PROD_02,https://prod02.esb.wienkav.at:8543/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
+WSK_PROD_03,https://prod03.esb.wienkav.at:8443/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
+WSK_PROD_04,https://prod04.esb.wienkav.at:8543/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
+ESB-T,http://esbt.wien.gv.at:8119/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
+ESB-Q,http://esbq.wien.gv.at:8019/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
+ESB-PROD-B,http://esbprodb.wien.gv.at:8119/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
