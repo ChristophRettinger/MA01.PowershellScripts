@@ -10,6 +10,7 @@
     - Query: only reports counts and timestamp ranges grouped by ScenarioName.
     - Test: performs full resend preparation but skips HTTP transmission.
     - Send: posts MessageData1 to a target endpoint from targets.csv.
+    - Curl: writes one curl command per prepared resend record to an output file.
 
     For resend actions, the script builds SourceInfoMsg and BuKeysString headers,
     supports envelope cleanup, batching, delay handling, single-step mode, and
@@ -97,7 +98,9 @@
     Optional output directory for logs.
 
 .PARAMETER Mode
-    Batch, All, or Single processing behavior. Defaults to Batch.
+    Batch, All, Single, or Curl processing behavior. Defaults to Batch.
+    Curl mode writes curl commands to a file in OutputDirectory and does not emit
+    per-record curl statements to the console.
 #>
 
 [CmdletBinding()]
@@ -201,7 +204,7 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory,
 
-    [ValidateSet('Batch','All','Single')]
+    [ValidateSet('Batch','All','Single','Curl')]
     [Parameter(Mandatory=$false)]
     [string]$Mode = 'Batch'
 )
@@ -216,8 +219,46 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
 Write-Host 'Key controls during processing: P=pause, R=resume/skip wait, S=single-step, X=stop.' -ForegroundColor Yellow
 
 $script:LogFilePath = $null
+$script:CurlOutputFilePath = $null
 $script:SuccessLog = [System.Collections.Generic.List[string]]::new()
 $script:ErrorLog = [System.Collections.Generic.List[string]]::new()
+
+function ConvertTo-BashSingleQuotedValue {
+    param([AllowNull()][string]$Value)
+
+    if ($null -eq $Value) {
+        return "''"
+    }
+
+    $escaped = "$Value" -replace "'", "'\"'\"'"
+    return "'$escaped'"
+}
+
+function ConvertTo-CurlCommand {
+    param(
+        [Parameter(Mandatory=$true)][string]$Uri,
+        [Parameter(Mandatory=$true)][hashtable]$Headers,
+        [Parameter(Mandatory=$true)][string]$Body
+    )
+
+    $headerParts = [System.Collections.Generic.List[string]]::new()
+    foreach ($headerName in ($Headers.Keys | Sort-Object)) {
+        $headerValue = "$(($Headers[$headerName]))"
+        $headerLine = "{0}: {1}" -f $headerName, $headerValue
+        $headerParts.Add("--header $(ConvertTo-BashSingleQuotedValue -Value $headerLine)") | Out-Null
+    }
+    $headerParts.Add("--header $(ConvertTo-BashSingleQuotedValue -Value 'Content-Type: text/xml; charset=utf-8')") | Out-Null
+
+    $commandParts = [System.Collections.Generic.List[string]]::new()
+    $commandParts.Add('curl --silent --show-error --location --request POST') | Out-Null
+    $commandParts.Add("--url $(ConvertTo-BashSingleQuotedValue -Value $Uri)") | Out-Null
+    foreach ($headerPart in $headerParts) {
+        $commandParts.Add($headerPart) | Out-Null
+    }
+    $commandParts.Add("--data-raw $(ConvertTo-BashSingleQuotedValue -Value $Body)") | Out-Null
+
+    return ($commandParts -join ' ')
+}
 
 function Write-RunLog {
     param(
@@ -547,12 +588,26 @@ if ($effectiveFilterCount -eq 0) {
     throw 'At least one filter parameter must be provided.'
 }
 
+if ($Mode -eq 'Curl') {
+    if ($Action -eq 'Query') {
+        throw 'Mode Curl requires Action Send or Test.'
+    }
+    if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+        throw 'OutputDirectory is required when Mode is Curl.'
+    }
+}
+
 if ($OutputDirectory) {
     if (-not (Test-Path -Path $OutputDirectory)) {
         $null = New-Item -Path $OutputDirectory -ItemType Directory -Force
     }
     $script:LogFilePath = Join-Path -Path $OutputDirectory -ChildPath ("Resend-FromElastic_{0}.log" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
     New-Item -Path $script:LogFilePath -ItemType File -Force | Out-Null
+
+    if ($Mode -eq 'Curl') {
+        $script:CurlOutputFilePath = Join-Path -Path $OutputDirectory -ChildPath ("Resend-FromElastic_{0}.curl.txt" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+        New-Item -Path $script:CurlOutputFilePath -ItemType File -Force | Out-Null
+    }
 }
 
 if (($Action -eq 'Send' -or $Action -eq 'Test') -and [string]::IsNullOrWhiteSpace($Target)) {
@@ -753,7 +808,16 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     $scenario = "$(Get-ElasticSourceValue -Source $current -FieldPath 'ScenarioName')"
 
     try {
-        if ($Action -eq 'Send') {
+        if ($Mode -eq 'Curl') {
+            $curlCommand = ConvertTo-CurlCommand -Uri $targetUri -Headers $headersOut -Body $messageData1
+            Add-Content -Path $script:CurlOutputFilePath -Value $curlCommand
+
+            $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') | CURL  | #$indexDisplay | $msgId | $scenario | TS $recordStamp"
+            $script:SuccessLog.Add($line) | Out-Null
+            if ($script:LogFilePath) {
+                Add-Content -Path $script:LogFilePath -Value $line
+            }
+        } elseif ($Action -eq 'Send') {
             Invoke-RestMethod -Method Post -Uri $targetUri -Headers $headersOut -Body $messageData1 -ContentType 'text/xml; charset=utf-8' -TimeoutSec 120 | Out-Null
             $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') | OK    | #$indexDisplay | $msgId | $scenario | TS $recordStamp"
             $script:SuccessLog.Add($line) | Out-Null
@@ -805,9 +869,11 @@ for ($i = 0; $i -lt $records.Count; $i++) {
 
 Write-Progress -Id 2 -Activity 'Resend processing' -Completed
 if ($script:SuccessLog) {
-	Write-Host ''
-	Write-Host 'Successes:' -ForegroundColor Green
-	$script:SuccessLog | ForEach-Object { Write-Host $_ -ForegroundColor Green }
+    if ($Mode -ne 'Curl') {
+        Write-Host ''
+        Write-Host 'Successes:' -ForegroundColor Green
+        $script:SuccessLog | ForEach-Object { Write-Host $_ -ForegroundColor Green }
+    }
 }
 if ($script:ErrorLog) {
 	Write-Host ''
@@ -816,3 +882,6 @@ if ($script:ErrorLog) {
 }
 Write-Host ''
 Write-RunLog -Level 'INFO' -Message "Finished. Successes: $($script:SuccessLog.Count), Errors: $($script:ErrorLog.Count)."
+if ($Mode -eq 'Curl' -and $script:CurlOutputFilePath) {
+    Write-RunLog -Level 'INFO' -Message "Curl commands written to '$script:CurlOutputFilePath'."
+}
