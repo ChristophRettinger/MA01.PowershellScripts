@@ -230,7 +230,7 @@ function ConvertTo-BashSingleQuotedValue {
         return "''"
     }
 
-    $escaped = "$Value" -replace "'", "'\"'\"'"
+    $escaped = "$Value" -replace "'", "\'"
     return "'$escaped'"
 }
 
