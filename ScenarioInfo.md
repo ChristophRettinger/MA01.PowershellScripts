@@ -205,4 +205,4 @@ The summary output tracks first/last occurrence, count, severity, flattened stat
 
 ## Cato unit extraction notes
 
-`Python-ExtractCatoUnitsForElastic` reads active Cato subscription XML payloads from `OrchEsbWskConfiguration`, extracts `Condition` entries where `locator="LST_KST"`, groups unit codes by leading Einrichtung digits, and writes NDJSON output for Elasticsearch ingestion. The script is kept compatible with both Python 2.7 and Python 3.x runtimes.
+`Python-ExtractCatoUnitsForElastic` reads active Cato subscription XML payloads from `OrchEsbWskConfiguration`, extracts `Condition` entries where `locator="LST_KST"`, groups unit codes by leading Einrichtung digits, and writes NDJSON output for Elasticsearch ingestion. The script now targets Python 3.9.25 (or newer) runtimes.

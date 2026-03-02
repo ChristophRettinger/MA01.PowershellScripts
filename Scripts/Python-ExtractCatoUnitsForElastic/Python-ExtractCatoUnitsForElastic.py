@@ -1,14 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Python-ExtractCatoUnitsForElastic
 
 Connects to OrchEsbWskConfiguration, reads active Cato subscriptions,
 extracts all Condition values for locator="LST_KST", aggregates unit codes by
 Einrichtung (first up-to-4 leading digits), and writes newline-delimited JSON
 objects (not a JSON array) to an output file in the current working directory.
-Compatible with Python 2.7 and Python 3.x.
+Requires Python 3.9.25 or newer.
 """
 
-from __future__ import print_function
 
 import argparse
 import json
