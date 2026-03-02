@@ -50,15 +50,39 @@ def fetch_subscription_xmls(server, database, username, password):
             "The 'pyodbc' module is not available. Install it with 'pip install pyodbc' and rerun the script."
         ) from exc
 
+    available_drivers = set(pyodbc.drivers())
+    preferred_drivers = ["ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server"]
+    selected_driver = None
+    for candidate in preferred_drivers:
+        if candidate in available_drivers:
+            selected_driver = candidate
+            break
+
+    if not selected_driver:
+        ordered = sorted(available_drivers)
+        message = "No supported SQL Server ODBC driver found."
+        if ordered:
+            raise RuntimeError(
+                "{0} Installed drivers: {1}. Install 'ODBC Driver 18 for SQL Server' or 'ODBC Driver 17 for SQL Server'.".format(
+                    message,
+                    ", ".join(ordered),
+                )
+            )
+        raise RuntimeError(
+            "{0} No ODBC drivers are currently registered. Install unixODBC and a SQL Server ODBC driver (18 or 17).".format(
+                message
+            )
+        )
+
     connection_string = (
-        "Driver={{ODBC Driver 18 for SQL Server}};"
-        "Server={0};"
-        "Database={1};"
-        "Uid={2};"
-        "Pwd={3};"
+        "Driver={{{0}}};"
+        "Server={1};"
+        "Database={2};"
+        "Uid={3};"
+        "Pwd={4};"
         "Encrypt=yes;"
         "TrustServerCertificate=yes;"
-    ).format(server, database, username, password)
+    ).format(selected_driver, server, database, username, password)
 
     query = """
     select SubscriptionXml
@@ -67,7 +91,15 @@ def fetch_subscription_xmls(server, database, username, password):
     where p.Name like '%Cato%' and s.Enabled = 1
     """
 
-    connection = pyodbc.connect(connection_string)
+    try:
+        connection = pyodbc.connect(connection_string)
+    except pyodbc.Error as exc:
+        raise RuntimeError(
+            "Unable to connect with ODBC driver '{0}'. Verify driver installation and SQL connectivity. pyodbc error: {1}".format(
+                selected_driver,
+                exc,
+            )
+        ) from exc
     try:
         cursor = connection.cursor()
         cursor.execute(query)
