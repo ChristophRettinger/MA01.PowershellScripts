@@ -1,6 +1,6 @@
 # MA01 PowerShell Scripts
 
-This repository contains a collection of PowerShell scripts used within the MA01 environment. Each script helps automate a specific operational or analysis task.
+This repository contains a collection of scripts used within the MA01 environment, primarily PowerShell. PowerShell is the default unless a different language is explicitly requested; Python exceptions use a `Python-` prefix for both folder and script file names.
 
 ## Scripts
 
@@ -23,6 +23,7 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 - **Create-ProcessModelOverview.ps1** - Parses ProcessModell_* XML files and creates Markdown overviews for model metadata, variables, business keys, merged element detail rows (`Name`, `Type`, `Usage`, `Input Expression`, `Output Expression`), and gateway outgoing edge conditions (including EdgeSequence-based paths and else branches), writing reports to the script-local `Output` folder by default.
 - **Write-ElasticDataToDatabase.ps1** - Reads SUBFL Elasticsearch records for a date range and writes selected MSGID/process/business-key fields (including change type) into SQL Server. Includes SQL templates for table creation and missing-output checks by MSGID/subid.
 - **Resend-FromElastic.ps1** - Queries SUBFL records from Elasticsearch, keeps only the oldest hit per BusinessCaseId/MSGID, and supports grouped reporting, controlled resend/test replay, or curl command export for configured HTTP targets.
+- **Python-ExtractCatoUnitsForElastic.py** - Reads active Cato subscriptions from SQL Server, extracts `LST_KST` units from subscription XML, groups units by Einrichtung, and writes newline-delimited JSON objects for Elasticsearch pickup.
 
 ## Shared utilities
 
