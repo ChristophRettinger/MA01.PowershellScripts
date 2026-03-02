@@ -16,6 +16,7 @@ from collections import defaultdict
 from datetime import datetime
 import io
 import os
+import sys
 import xml.etree.ElementTree as ET
 
 
@@ -35,7 +36,19 @@ def parse_args():
 
 
 def fetch_subscription_xmls(server, database, username, password):
-    import pyodbc
+    try:
+        import pyodbc
+    except ImportError as exc:
+        message = str(exc)
+        if "libodbc.so.2" in message:
+            raise RuntimeError(
+                "pyodbc is installed, but the unixODBC runtime library is missing (libodbc.so.2). "
+                "Install unixODBC on the host, for example: 'dnf install unixODBC' or 'apt-get install unixodbc', "
+                "then rerun the script."
+            ) from exc
+        raise RuntimeError(
+            "The 'pyodbc' module is not available. Install it with 'pip install pyodbc' and rerun the script."
+        ) from exc
 
     connection_string = (
         "Driver={ODBC Driver 18 for SQL Server};"
@@ -126,7 +139,12 @@ def write_ndjson(grouped_units, output_dir):
 
 def main():
     args = parse_args()
-    xml_rows = fetch_subscription_xmls(args.server, args.database, args.username, args.password)
+    try:
+        xml_rows = fetch_subscription_xmls(args.server, args.database, args.username, args.password)
+    except RuntimeError as exc:
+        print("Error: {0}".format(exc), file=sys.stderr)
+        return 1
+
     grouped_units = aggregate_units_by_einrichtung(xml_rows)
     output_file = write_ndjson(grouped_units, args.output_dir)
     print("Wrote {0} records to {1}".format(len(grouped_units), output_file))
