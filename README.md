@@ -23,7 +23,7 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 - **Create-ProcessModelOverview.ps1** - Parses ProcessModell_* XML files and creates Markdown overviews for model metadata, variables, business keys, merged element detail rows (`Name`, `Type`, `Usage`, `Input Expression`, `Output Expression`), and gateway outgoing edge conditions (including EdgeSequence-based paths and else branches), writing reports to the script-local `Output` folder by default.
 - **Write-ElasticDataToDatabase.ps1** - Reads SUBFL Elasticsearch records for a date range and writes selected MSGID/process/business-key fields (including change type) into SQL Server. Includes SQL templates for table creation and missing-output checks by MSGID/subid.
 - **Resend-FromElastic.ps1** - Queries SUBFL records from Elasticsearch, keeps only the oldest hit per BusinessCaseId/MSGID, and supports grouped reporting, controlled resend/test replay, or curl command export for configured HTTP targets.
-- **Python-ExtractCatoUnitsForElastic.py** - Reads active Cato subscriptions from SQL Server, extracts `LST_KST` units from subscription XML, groups units by Einrichtung, writes newline-delimited JSON objects for Elasticsearch pickup, and reports missing `pyodbc`/unixODBC dependencies with actionable guidance (requires Python 3.9.25+).
+- **Python-ExtractCatoUnitsForElastic.py** - Reads active Cato subscriptions from SQL Server, extracts `LST_KST` units from subscription XML, groups units by Einrichtung, writes newline-delimited JSON objects for Elasticsearch pickup, and reports dependency or ODBC connection-string issues with actionable guidance.
 
 ## Shared utilities
 
