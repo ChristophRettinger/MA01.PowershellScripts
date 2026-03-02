@@ -1,70 +1,52 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Python-ExtractCatoUnitsForElastic
 
 Connects to OrchEsbWskConfiguration, reads active Cato subscriptions,
 extracts all Condition values for locator="LST_KST", aggregates unit codes by
 Einrichtung (first up-to-4 leading digits), and writes newline-delimited JSON
 objects (not a JSON array) to an output file in the current working directory.
+Compatible with Python 2.7 and Python 3.x.
 """
 
-from __future__ import annotations
+from __future__ import print_function
 
 import argparse
 import json
 import re
 from collections import defaultdict
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime
+import io
+import os
 import xml.etree.ElementTree as ET
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args():
     parser = argparse.ArgumentParser(
         description=(
             "Extract LST_KST unit values from active Cato subscriptions and "
             "write NDJSON grouped by Einrichtung."
         )
     )
-    parser.add_argument(
-        "--server",
-        default="orchestrasql.wienkav.at",
-        help="SQL Server host name.",
-    )
-    parser.add_argument(
-        "--database",
-        default="OrchEsbWskConfiguration",
-        help="SQL Server database name.",
-    )
-    parser.add_argument(
-        "--username",
-        default="Orchestra_Access_User",
-        help="SQL Server username.",
-    )
-    parser.add_argument(
-        "--password",
-        default="PASSWORD",
-        help="SQL Server password.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default=".",
-        help="Directory where the output file is created.",
-    )
+    parser.add_argument("--server", default="orchestrasql.wienkav.at", help="SQL Server host name.")
+    parser.add_argument("--database", default="OrchEsbWskConfiguration", help="SQL Server database name.")
+    parser.add_argument("--username", default="Orchestra_Access_User", help="SQL Server username.")
+    parser.add_argument("--password", default="PASSWORD", help="SQL Server password.")
+    parser.add_argument("--output-dir", default=".", help="Directory where the output file is created.")
     return parser.parse_args()
 
 
-def fetch_subscription_xmls(server: str, database: str, username: str, password: str) -> list[str]:
+def fetch_subscription_xmls(server, database, username, password):
     import pyodbc
 
     connection_string = (
         "Driver={ODBC Driver 18 for SQL Server};"
-        f"Server={server};"
-        f"Database={database};"
-        f"Uid={username};"
-        f"Pwd={password};"
+        "Server={0};"
+        "Database={1};"
+        "Uid={2};"
+        "Pwd={3};"
         "Encrypt=yes;"
         "TrustServerCertificate=yes;"
-    )
+    ).format(server, database, username, password)
 
     query = """
     select SubscriptionXml
@@ -73,19 +55,22 @@ def fetch_subscription_xmls(server: str, database: str, username: str, password:
     where p.Name like '%Cato%' and s.Enabled = 1
     """
 
-    with pyodbc.connect(connection_string) as connection:
+    connection = pyodbc.connect(connection_string)
+    try:
         cursor = connection.cursor()
         cursor.execute(query)
         return [row[0] for row in cursor.fetchall() if row[0]]
+    finally:
+        connection.close()
 
 
-def extract_units_from_subscription_xml(xml_text: str) -> list[str]:
+def extract_units_from_subscription_xml(xml_text):
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
         return []
 
-    units: list[str] = []
+    units = []
     for node in root.iter("Condition"):
         if node.attrib.get("locator") != "LST_KST":
             continue
@@ -97,13 +82,15 @@ def extract_units_from_subscription_xml(xml_text: str) -> list[str]:
     return units
 
 
-def get_einrichtung(unit: str) -> str | None:
+def get_einrichtung(unit):
     match = re.match(r"^(\d{1,4})", unit)
-    return match.group(1) if match else None
+    if not match:
+        return None
+    return match.group(1)
 
 
-def aggregate_units_by_einrichtung(xml_rows: list[str]) -> dict[str, list[str]]:
-    grouped: dict[str, set[str]] = defaultdict(set)
+def aggregate_units_by_einrichtung(xml_rows):
+    grouped = defaultdict(set)
 
     for xml_text in xml_rows:
         for unit in extract_units_from_subscription_xml(xml_text):
@@ -112,13 +99,16 @@ def aggregate_units_by_einrichtung(xml_rows: list[str]) -> dict[str, list[str]]:
                 continue
             grouped[einrichtung].add(unit)
 
-    return {key: sorted(values) for key, values in sorted(grouped.items())}
+    output = {}
+    for key in sorted(grouped.keys()):
+        output[key] = sorted(grouped[key])
+    return output
 
 
-def write_ndjson(grouped_units: dict[str, list[str]], output_dir: str) -> Path:
-    now = datetime.now(timezone.utc)
-    timestamp = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    output_file = Path(output_dir) / f"{now.strftime('%Y%m%dT%H%M%SZ')}.json"
+def write_ndjson(grouped_units, output_dir):
+    now = datetime.utcnow()
+    timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    output_file = os.path.join(output_dir, now.strftime("%Y%m%dT%H%M%SZ") + ".json")
 
     lines = []
     for einrichtung, oes in grouped_units.items():
@@ -127,18 +117,20 @@ def write_ndjson(grouped_units: dict[str, list[str]], output_dir: str) -> Path:
             "einrichtung": einrichtung,
             "oes": oes,
         }
-        lines.append(json.dumps(payload, ensure_ascii=False, indent=2))
+        lines.append(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
-    output_file.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    content = "\n".join(lines) + ("\n" if lines else "")
+    with io.open(output_file, "w", encoding="utf-8") as handle:
+        handle.write(content)
     return output_file
 
 
-def main() -> int:
+def main():
     args = parse_args()
     xml_rows = fetch_subscription_xmls(args.server, args.database, args.username, args.password)
     grouped_units = aggregate_units_by_einrichtung(xml_rows)
     output_file = write_ndjson(grouped_units, args.output_dir)
-    print(f"Wrote {len(grouped_units)} records to {output_file}")
+    print("Wrote {0} records to {1}".format(len(grouped_units), output_file))
     return 0
 
 

@@ -202,3 +202,7 @@ The summary output tracks first/last occurrence, count, severity, flattened stat
 
 `Resend-FromElastic` supports operational SUBFL replay workflows by querying Elasticsearch with stage/category/MSGID filters, keeping only the oldest hit per BusinessCaseId/MSGID, and replaying payloads in batch, all-at-once, or interactive single-step mode with keyboard controls (P/R/S/X). It can perform dry-run validation via `Action Test`, write per-record curl POST commands via `Mode Curl` (output file in `OutputDirectory`, no curl line console echo), writes timestamped success/error logs, reads resend endpoint definitions from `targets.csv`, tab-completes `Target` values from CSV `Name` entries, and can emit SourceInfo subscription filters through `TargetParty` and `TargetSubId`. Multi-value filter parameters also normalize comma-separated input into distinct values so array filters apply as Elasticsearch OR terms.
 
+
+## Cato unit extraction notes
+
+`Python-ExtractCatoUnitsForElastic` reads active Cato subscription XML payloads from `OrchEsbWskConfiguration`, extracts `Condition` entries where `locator="LST_KST"`, groups unit codes by leading Einrichtung digits, and writes NDJSON output for Elasticsearch ingestion. The script is kept compatible with both Python 2.7 and Python 3.x runtimes.
