@@ -51,7 +51,7 @@ def fetch_subscription_xmls(server, database, username, password):
         ) from exc
 
     connection_string = (
-        "Driver={ODBC Driver 18 for SQL Server};"
+        "Driver={{ODBC Driver 18 for SQL Server}};"
         "Server={0};"
         "Database={1};"
         "Uid={2};"
