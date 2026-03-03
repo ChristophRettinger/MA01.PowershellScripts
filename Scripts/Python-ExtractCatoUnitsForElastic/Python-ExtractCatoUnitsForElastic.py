@@ -2,9 +2,9 @@
 """Python-ExtractCatoUnitsForElastic
 
 Connects to OrchEsbWskConfiguration, reads active Cato subscriptions,
-extracts all Condition values for locator="LST_KST", aggregates unit codes by
-Einrichtung (first up-to-4 leading digits), and writes newline-delimited JSON
-objects (not a JSON array) to an output file in the current working directory.
+extracts all Condition values for locator="LST_KST", and writes one NDJSON row
+per OE (no grouped OE arrays) to an output file in the current working
+directory.
 Requires Python 3.9.25 or newer.
 """
 
@@ -12,7 +12,6 @@ Requires Python 3.9.25 or newer.
 import argparse
 import json
 import re
-from collections import defaultdict
 from datetime import datetime
 import io
 import os
@@ -24,7 +23,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description=(
             "Extract LST_KST unit values from active Cato subscriptions and "
-            "write NDJSON grouped by Einrichtung."
+            "write one NDJSON row per OE."
         )
     )
     parser.add_argument("--server", default="orchestrasql.wienkav.at", help="SQL Server host name.")
@@ -133,34 +132,32 @@ def get_einrichtung(unit):
     return match.group(1)
 
 
-def aggregate_units_by_einrichtung(xml_rows):
-    grouped = defaultdict(set)
+def collect_units(xml_rows):
+    unique_units = set()
 
     for xml_text in xml_rows:
         for unit in extract_units_from_subscription_xml(xml_text):
-            einrichtung = get_einrichtung(unit)
-            if not einrichtung:
-                continue
-            grouped[einrichtung].add(unit)
+            if get_einrichtung(unit):
+                unique_units.add(unit)
 
-    output = {}
-    for key in sorted(grouped.keys()):
-        output[key] = sorted(grouped[key])
-    return output
+    return sorted(unique_units)
 
 
-def write_ndjson(grouped_units, output_dir):
+def write_ndjson(units, output_dir):
     now = datetime.utcnow()
     timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     output_file = os.path.join(output_dir, now.strftime("%Y%m%dT%H%M%SZ") + ".json")
 
     lines = []
-    for einrichtung, oes in grouped_units.items():
+    for oe in units:
+        einrichtung = get_einrichtung(oe)
+        if not einrichtung:
+            continue
         payload = {
             "@timestamp": timestamp,
             "einrichtung": einrichtung,
             "typ": "ADT",
-            "oes": oes,
+            "oe": oe,
         }
         lines.append(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
@@ -178,9 +175,9 @@ def main():
         print("Error: {0}".format(exc), file=sys.stderr)
         return 1
 
-    grouped_units = aggregate_units_by_einrichtung(xml_rows)
-    output_file = write_ndjson(grouped_units, args.output_dir)
-    print("Wrote {0} records to {1}".format(len(grouped_units), output_file))
+    units = collect_units(xml_rows)
+    output_file = write_ndjson(units, args.output_dir)
+    print("Wrote {0} records to {1}".format(len(units), output_file))
     return 0
 
 
