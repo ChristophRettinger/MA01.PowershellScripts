@@ -159,6 +159,7 @@ def write_ndjson(grouped_units, output_dir):
         payload = {
             "@timestamp": timestamp,
             "einrichtung": einrichtung,
+            "typ": "ADT",
             "oes": oes,
         }
         lines.append(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
