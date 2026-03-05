@@ -216,7 +216,7 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
 }
 . $sharedHelpersPath
 
-Write-Host 'Key controls during processing: P=pause, R=resume/skip wait, S=single-step, X=stop.' -ForegroundColor Yellow
+$processingControlHint = 'Controls: P=pause, R=resume/skip wait, S=single-step, X=stop'
 
 $script:LogFilePath = $null
 $script:CurlOutputFilePath = $null
@@ -755,7 +755,7 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     $indexDisplay = $i + 1
 
     $progressPercent = if ($records.Count -gt 0) { [int](($indexDisplay * 100) / $records.Count) } else { 0 }
-    Write-Progress -Id 2 -Activity 'Resend processing' -Status "Record $indexDisplay/$($records.Count)" -PercentComplete $progressPercent
+    Write-Progress -Id 2 -Activity 'Resend processing' -Status "Record $indexDisplay/$($records.Count) | $processingControlHint" -PercentComplete $progressPercent
 
     while ($true) {
         $control = Get-ControlAction
