@@ -233,8 +233,6 @@ function Initialize-SystemXmlLinq {
 
 Initialize-SystemXmlLinq
 
-Write-Host 'Key controls during processing: P=pause, R=resume/skip wait, S=single-step, X=stop.' -ForegroundColor Yellow
-
 $script:LogFilePath = $null
 $script:CurlOutputFilePath = $null
 $script:SuccessLog = [System.Collections.Generic.List[string]]::new()
@@ -772,7 +770,9 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     $indexDisplay = $i + 1
 
     $progressPercent = if ($records.Count -gt 0) { [int](($indexDisplay * 100) / $records.Count) } else { 0 }
-    Write-Progress -Id 2 -Activity 'Resend processing' -Status "Record $indexDisplay/$($records.Count)" -PercentComplete $progressPercent
+    $modeHint = if ($singleStep) { 'single-step' } elseif ($paused) { 'paused' } else { 'running' }
+    $progressStatus = "Record $indexDisplay/$($records.Count) | $($modeHint) | Controls: P=pause, R=resume/skip wait, S=single-step, X=stop"
+    Write-Progress -Id 2 -Activity 'Resend processing' -Status $progressStatus -PercentComplete $progressPercent
 
     while ($true) {
         $control = Get-ControlAction
