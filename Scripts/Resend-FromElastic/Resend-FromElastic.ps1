@@ -216,6 +216,23 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
 }
 . $sharedHelpersPath
 
+function Initialize-SystemXmlLinq {
+    if ($null -ne ([type]::GetType('System.Xml.Linq.XDocument, System.Xml.Linq', $false))) {
+        return
+    }
+
+    try {
+        Add-Type -AssemblyName 'System.Xml.Linq' -ErrorAction Stop
+    } catch {
+        $loadedAssembly = [Reflection.Assembly]::LoadWithPartialName('System.Xml.Linq')
+        if ($null -eq $loadedAssembly) {
+            Write-Warning 'System.Xml.Linq could not be loaded; CleanupEnvelope may be skipped.'
+        }
+    }
+}
+
+Initialize-SystemXmlLinq
+
 Write-Host 'Key controls during processing: P=pause, R=resume/skip wait, S=single-step, X=stop.' -ForegroundColor Yellow
 
 $script:LogFilePath = $null
