@@ -46,6 +46,9 @@
 .PARAMETER PatientId
     Array filter for patient IDs; accepts repeated or comma-separated values.
 
+.PARAMETER SubId
+    Array filter for subscription IDs (BK.SUBFL_subid); accepts repeated or comma-separated values.
+
 .PARAMETER BusinessCaseId
     Array filter for MSGID/BusinessCaseId; accepts repeated or comma-separated values and preserves leading zeros.
 
@@ -131,6 +134,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string[]]$PatientId,
+
+    [Parameter(Mandatory=$false)]
+    [string[]]$SubId,
 
     [Alias('MSGID')]
     [Parameter(Mandatory=$false)]
@@ -581,6 +587,7 @@ if ($BusinessCaseId -and -not $PSBoundParameters.ContainsKey('Stage')) {
 
 $CaseNo = Normalize-FilterValues -Values $CaseNo
 $PatientId = Normalize-FilterValues -Values $PatientId
+$SubId = Normalize-FilterValues -Values $SubId
 $BusinessCaseId = Normalize-FilterValues -Values $BusinessCaseId
 $rawBusinessCaseIds = Resolve-RawBusinessCaseIdsFromInvocation $MyInvocation
 if ($rawBusinessCaseIds.Count -gt 0 -and $rawBusinessCaseIds.Count -eq $BusinessCaseId.Count) {
@@ -595,7 +602,7 @@ $Environment = Normalize-FilterValues -Values $Environment
 $effectiveFilterCount = 0
 if (-not [string]::IsNullOrWhiteSpace($ScenarioName)) { $effectiveFilterCount++ }
 if (-not [string]::IsNullOrWhiteSpace($ProcessName)) { $effectiveFilterCount++ }
-foreach ($arr in @($CaseNo,$PatientId,$BusinessCaseId,$Category,$Subcategory,$HcmMsgEvent,$Instance,$Environment)) {
+foreach ($arr in @($CaseNo,$PatientId,$SubId,$BusinessCaseId,$Category,$Subcategory,$HcmMsgEvent,$Instance,$Environment)) {
     if ($arr -and @($arr | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") }).Count -gt 0) { $effectiveFilterCount++ }
 }
 if ($Stage) { $effectiveFilterCount++ }
@@ -651,6 +658,7 @@ $termFilters = @(
     (ConvertTo-ElasticTermsFilter -Field 'BK._CASENO_ISH' -Values $CaseNo),
     (ConvertTo-ElasticTermsFilter -Field 'BK._PID' -Values $PatientId),
     (ConvertTo-ElasticTermsFilter -Field 'BK._PID_ISH' -Values $PatientId),
+    (ConvertTo-ElasticTermsFilter -Field 'BK.SUBFL_subid' -Values $SubId),
     (ConvertTo-ElasticTermsFilter -Field 'BusinessCaseId' -Values $BusinessCaseId),
     (ConvertTo-ElasticTermsFilter -Field 'BK.SUBFL_category' -Values $Category),
     (ConvertTo-ElasticTermsFilter -Field 'BK.SUBFL_subcategory' -Values $Subcategory),
