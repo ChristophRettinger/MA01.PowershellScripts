@@ -14,7 +14,7 @@
 
     For resend actions, the script builds SourceInfoMsg and BuKeysString headers,
     supports envelope cleanup, batching, delay handling, single-step mode, and
-    keyboard controls (P pause, R resume/skip wait, S single-step, X exit).
+    keyboard controls (P pause, R resume, S single-step, X exit).
 
     When multiple records share the same BusinessCaseId/MSGID, only the oldest
     record (lowest @timestamp) is kept for processing.
@@ -894,6 +894,8 @@ for ($i = 0; $i -lt $records.Count; $i++) {
         $script:ErrorLog.Add($err) | Out-Null
         Write-RunLog -Level 'ERROR' -Message $err
     }
+
+    & $updateProgress
 
     if ($singleStep) {
         $paused = $true
