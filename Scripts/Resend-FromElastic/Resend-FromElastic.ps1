@@ -570,11 +570,32 @@ function Get-ControlAction {
             if ($char -eq 'P') { return 'Pause' }
             if ($char -eq 'R') { return 'Resume' }
             if ($char -eq 'S') { return 'Single' }
+            if ($char -eq '+') { return 'DelayIncrease' }
+            if ($char -eq '-') { return 'DelayDecrease' }
+            if ($key.Key -eq [ConsoleKey]::Add -or $key.Key -eq [ConsoleKey]::OemPlus) { return 'DelayIncrease' }
+            if ($key.Key -eq [ConsoleKey]::Subtract -or $key.Key -eq [ConsoleKey]::OemMinus) { return 'DelayDecrease' }
             if ($char -eq 'X' -or $key.Key -eq [ConsoleKey]::C -and $key.Modifiers -band [ConsoleModifiers]::Control) { return 'Exit' }
         }
     }
 
     return $null
+}
+
+function Update-ResendProgressStatus {
+    param(
+        [int]$IndexDisplay,
+        [int]$TotalRecords,
+        [bool]$SingleStepMode,
+        [bool]$PausedState,
+        [int]$BatchSizeValue,
+        [int]$DelaySeconds,
+        [int]$PercentComplete
+    )
+
+    $modeHint = if ($SingleStepMode) { 'single-step' } elseif ($PausedState) { 'paused' } else { 'running' }
+    $delayDisplay = "{0}s" -f ([Math]::Max(0, $DelaySeconds))
+    $statusLine = "Record $IndexDisplay/$TotalRecords | $modeHint | Bsz:$BatchSizeValue Dly:$delayDisplay | P=pause R=resume S=step +=delay+5s -=delay-5s X=stop"
+    Write-Progress -Id 2 -Activity 'Resend processing' -Status $statusLine -PercentComplete $PercentComplete
 }
 
 if ($StartDate -gt $EndDate) {
@@ -769,8 +790,8 @@ if ($Action -eq 'Query') {
 $targetUri = Resolve-TargetDefinition -TargetName $Target
 Write-RunLog -Level 'INFO' -Message "Resolved target '$Target' to '$targetUri'. Action: $Action."
 
-$paused = $false
 $singleStep = ($Mode -eq 'Single')
+$paused = $singleStep
 $stopRequested = $false
 
 for ($i = 0; $i -lt $records.Count; $i++) {
@@ -778,9 +799,10 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     $indexDisplay = $i + 1
 
     $progressPercent = if ($records.Count -gt 0) { [int](($indexDisplay * 100) / $records.Count) } else { 0 }
-    $modeHint = if ($singleStep) { 'single-step' } elseif ($paused) { 'paused' } else { 'running' }
-    $progressStatus = "Record $indexDisplay/$($records.Count) | $($modeHint) | Controls: P=pause, R=resume/skip wait, S=single-step, X=stop"
-    Write-Progress -Id 2 -Activity 'Resend processing' -Status $progressStatus -PercentComplete $progressPercent
+    $updateProgress = {
+        Update-ResendProgressStatus -IndexDisplay $indexDisplay -TotalRecords $records.Count -SingleStepMode $singleStep -PausedState $paused -BatchSizeValue $BatchSize -DelaySeconds $DelayBetweenBatches -PercentComplete $progressPercent
+    }
+    & $updateProgress
 
     while ($true) {
         $control = Get-ControlAction
@@ -795,10 +817,25 @@ for ($i = 0; $i -lt $records.Count; $i++) {
             $paused = $false
             $singleStep = $true
             Write-RunLog -Level 'INFO' -Message 'Single-step mode activated (S).'
+        } elseif ($control -eq 'DelayIncrease') {
+            $DelayBetweenBatches += 5
+            Write-RunLog -Level 'INFO' -Message "Batch delay updated to $DelayBetweenBatches seconds (+ key)."
+        } elseif ($control -eq 'DelayDecrease') {
+            $newDelayValue = [Math]::Max(0, $DelayBetweenBatches - 5)
+            if ($newDelayValue -ne $DelayBetweenBatches) {
+                $DelayBetweenBatches = $newDelayValue
+                Write-RunLog -Level 'INFO' -Message "Batch delay updated to $DelayBetweenBatches seconds (- key)."
+            } else {
+                Write-RunLog -Level 'INFO' -Message 'Batch delay already at 0 seconds (- key).'
+            }
         } elseif ($control -eq 'Exit') {
             $stopRequested = $true
             Write-RunLog -Level 'WARN' -Message 'Exit requested (X/Ctrl+C).'
             break
+        }
+
+        if ($control) {
+            & $updateProgress
         }
 
         if ($stopRequested -or -not $paused) {
@@ -871,18 +908,44 @@ for ($i = 0; $i -lt $records.Count; $i++) {
             while ((Get-Date) -lt $waitUntil) {
                 $control = Get-ControlAction
                 if ($control -eq 'Resume') {
+                    $paused = $false
+                    $singleStep = $false
                     Write-RunLog -Level 'INFO' -Message 'Next batch started early (R).'
+                    & $updateProgress
                     break
                 }
                 if ($control -eq 'Pause') {
                     $paused = $true
+                    & $updateProgress
                 }
                 if ($control -eq 'Single') {
                     $singleStep = $true
+                    $paused = $false
+                    & $updateProgress
                 }
                 if ($control -eq 'Exit') {
                     $stopRequested = $true
+                    & $updateProgress
                     break
+                }
+                if ($control -eq 'DelayIncrease') {
+                    $DelayBetweenBatches += 5
+                    Write-RunLog -Level 'INFO' -Message "Batch delay updated to $DelayBetweenBatches seconds (+ key)."
+                    $waitUntil = (Get-Date).AddSeconds($DelayBetweenBatches)
+                    & $updateProgress
+                    continue
+                }
+                if ($control -eq 'DelayDecrease') {
+                    $newDelayDuringWait = [Math]::Max(0, $DelayBetweenBatches - 5)
+                    if ($newDelayDuringWait -ne $DelayBetweenBatches) {
+                        $DelayBetweenBatches = $newDelayDuringWait
+                        Write-RunLog -Level 'INFO' -Message "Batch delay updated to $DelayBetweenBatches seconds (- key)."
+                    } else {
+                        Write-RunLog -Level 'INFO' -Message 'Batch delay already at 0 seconds (- key).'
+                    }
+                    $waitUntil = (Get-Date).AddSeconds($DelayBetweenBatches)
+                    & $updateProgress
+                    continue
                 }
                 Start-Sleep -Milliseconds 150
             }
