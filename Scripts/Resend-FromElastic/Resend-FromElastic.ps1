@@ -594,7 +594,7 @@ function Update-ResendProgressStatus {
 
     $modeHint = if ($SingleStepMode) { 'single-step' } elseif ($PausedState) { 'paused' } else { 'running' }
     $delayDisplay = "{0}s" -f ([Math]::Max(0, $DelaySeconds))
-    $statusLine = "Record $IndexDisplay/$TotalRecords | $modeHint | Bsz:$BatchSizeValue Dly:$delayDisplay | P=pause R=resume S=step +=delay+5s -=delay-5s X=stop"
+    $statusLine = "Record $IndexDisplay/$TotalRecords | $modeHint | Bsz:$BatchSizeValue Dly:$delayDisplay | P=pause R=resume S=step +/-=delay±5s X=stop"
     Write-Progress -Id 2 -Activity 'Resend processing' -Status $statusLine -PercentComplete $PercentComplete
 }
 
