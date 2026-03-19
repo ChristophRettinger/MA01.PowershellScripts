@@ -958,19 +958,6 @@ for ($i = 0; $i -lt $records.Count; $i++) {
 }
 
 Write-Progress -Id 2 -Activity 'Resend processing' -Completed
-if ($script:SuccessLog) {
-    if ($Mode -ne 'Curl') {
-        Write-Host ''
-        Write-Host 'Successes:' -ForegroundColor Green
-        $script:SuccessLog | ForEach-Object { Write-Host $_ -ForegroundColor Green }
-    }
-}
-if ($script:ErrorLog) {
-	Write-Host ''
-	Write-Host 'Errors:' -ForegroundColor Red
-	$script:ErrorLog | ForEach-Object { Write-Host $_ -ForegroundColor Red }
-}
-Write-Host ''
 Write-RunLog -Level 'INFO' -Message "Finished. Successes: $($script:SuccessLog.Count), Errors: $($script:ErrorLog.Count)."
 if ($Mode -eq 'Curl' -and $script:CurlOutputFilePath) {
     Write-RunLog -Level 'INFO' -Message "Curl commands written to '$script:CurlOutputFilePath'."
