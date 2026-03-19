@@ -108,7 +108,7 @@ $codeScanRules = @(
     [pscustomobject]@{
         Code = 'nls'
         Message = 'non-Local SUBFL_stage usage'
-        Pattern = 'addBuKey\(.*SUBFL_stage'
+        Pattern = 'addBuKey\([^)]*SUBFL_stage'
         Options = [System.Text.RegularExpressions.RegexOptions]::Singleline
         Targets = @('ProcessModel', 'MessageMapping')
     }
