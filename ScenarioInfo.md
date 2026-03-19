@@ -17,6 +17,13 @@ This file summarizes the Orchestra scenario folder layout and highlights the con
 
 A `.psc` file is a zipped scenario folder (the folder contents, not the folder itself). When `Validate-Scenarios` runs in PSC mode (or when PSC inspection is enabled in folder mode), it opens `.psc` archives and validates the same `ProcessModell_*`, `Channel_*`, and `MessageMapping_*` entries contained inside, skipping entries that include file extensions (such as `.prop`).
 
+## Regex Guard checks (`RG`)
+
+- `Validate-Scenarios` also runs regex-based inspections against `ProcessModell_*` and `MessageMapping_*` contents. Matches are reported as category `RG` (Regex Guard) so they can be toggled with `-ErrorCategories` like the other categories.
+- Regex rules live inside `Scripts/Validate-Scenarios/Validate-Scenarios.ps1` (no external config) and each rule specifies which artifact types it applies to.
+- The initial rule flags `addBuKey(...SUBFL_stage)` usage (issue code `RG:nls`) to highlight non-local SUBFL stage calls.
+- Description field exception codes do not suppress RG warnings; exclude RG via `-ErrorCategories` when you must temporarily ignore these findings.
+
 ## Process model files (`ProcessModell_*`)
 
 Process model files are XML documents named `ProcessModell_*` (no extension).

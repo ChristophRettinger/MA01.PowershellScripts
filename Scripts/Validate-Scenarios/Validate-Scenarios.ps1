@@ -15,6 +15,11 @@
     headings for the scenario, process models, channels, and mappings. Description
     tags in each XML document can include exception codes (for example: "PM:v; RS:a;
     SC:p75") to allow deviations from the default validation rules.
+    Additionally, the script evaluates regex-based "Regex Guard (RG)" rules against
+    ProcessModell_* and MessageMapping_* contents to catch disallowed constructs
+    (for example: `addBuKey(...SUBFL_stage)`). RG findings cannot be suppressed via
+    description tokens and are only suppressed when the RG category is excluded via
+    -ErrorCategories.
 
 .NOTES
     Default naming expectations (documented for reference even if not validated):
@@ -99,6 +104,16 @@ $channelRootTypesWithoutStValidation = @(
 	'emds.epi.impl.adapter.database.DatabaseInboundConfig'
 )
 
+$codeScanRules = @(
+    [pscustomobject]@{
+        Code = 'nls'
+        Message = 'non-Local SUBFL_stage usage'
+        Pattern = 'addBuKey\(.*SUBFL_stage'
+        Options = [System.Text.RegularExpressions.RegexOptions]::Singleline
+        Targets = @('ProcessModel', 'MessageMapping')
+    }
+)
+
 $businessKeysXPath = '/ProcessModel/businessKeys/Property'
 $processModelXPaths = [ordered]@{
     isDurable = '/ProcessModel/processObjects/EventStart/trigger[isThrowing="false"]/isDurable'
@@ -119,7 +134,7 @@ $mappingColor = 'Magenta'
 $channelColor = 'Yellow'
 $issueColor = 'Red'
 
-$allCategories = @('PM','RS','MR','SI','BK','ST')
+$allCategories = @('PM','RS','MR','SI','BK','ST','RG')
 $categorySet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 if ($PSBoundParameters.ContainsKey('ErrorCategories') -and $ErrorCategories) {
     foreach ($entry in $ErrorCategories) {
@@ -183,11 +198,24 @@ function Get-ScenarioInfo {
 
 function Get-XmlDocument {
     param (
-        [Parameter(Mandatory = $true)]
-        [string]$FilePath
+        [Parameter(Mandatory = $false)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory = $false)]
+        [string]$RawContent
     )
 
-    return [xml](Get-Content -Path $FilePath -Raw)
+    $content = $RawContent
+
+    if (-not $PSBoundParameters.ContainsKey('RawContent')) {
+        if (-not $FilePath) {
+            throw 'Either FilePath or RawContent must be specified.'
+        }
+
+        $content = Get-Content -Path $FilePath -Raw
+    }
+
+    return [xml]$content
 }
 
 function Test-NameMatchesFilter {
@@ -313,6 +341,54 @@ function Test-CategoryEnabled {
     )
 
     return $categorySet.Contains($Category)
+}
+
+function Invoke-CodeScanRules {
+    param (
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('ProcessModel', 'MessageMapping')]
+        [string]$ArtifactType,
+
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]$Content
+    )
+
+    $issues = New-Object System.Collections.Generic.List[object]
+
+    if (-not (Test-CategoryEnabled -Category 'RG')) {
+        return $issues
+    }
+
+    if (-not $Content) {
+        return $issues
+    }
+
+    foreach ($rule in $script:codeScanRules) {
+        if ($rule.Targets -and -not ($rule.Targets -contains $ArtifactType)) {
+            continue
+        }
+
+        $options = if ($null -ne $rule.Options) {
+            $rule.Options
+        } else {
+            [System.Text.RegularExpressions.RegexOptions]::None
+        }
+
+        $matchCount = ([System.Text.RegularExpressions.Regex]::Matches($Content, $rule.Pattern, $options)).Count
+        if ($matchCount -le 0) {
+            continue
+        }
+
+        $message = $rule.Message
+        if ($matchCount -gt 1) {
+            $message = "$($message) ($matchCount matches)"
+        }
+
+        $issues.Add((New-ValidationIssue -Category 'RG' -Code $rule.Code -Message $message))
+    }
+
+    return $issues
 }
 
 
@@ -454,7 +530,11 @@ function Add-ScenarioResult {
         [string]$FilePath,
 
         [Parameter(Mandatory = $true)]
-        [xml]$XmlContent
+        [xml]$XmlContent,
+
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]$RawContent
     )
 
     if (-not $script:scenarioResults.ContainsKey($ScenarioInfo.Name)) {
@@ -558,6 +638,10 @@ function Add-ScenarioResult {
             }
         }
 
+        foreach ($issue in (Invoke-CodeScanRules -ArtifactType 'ProcessModel' -Content $RawContent)) {
+            $issues.Add($issue)
+        }
+
         if ($issues.Count -gt 0) {
             $script:scenarioResults[$ScenarioInfo.Name].ProcessModels += [PSCustomObject]@{
                 Name = $processModelName
@@ -606,23 +690,27 @@ function Add-ScenarioResult {
         $mappingName = Get-NodeValue -XmlDocument $XmlContent -XPath '/emds.mapping.proc.MappingScript/name'
         $parallelExecution = Get-NodeValue -XmlDocument $XmlContent -XPath '/emds.mapping.proc.MappingScript/parallelExecution'
         $strategyCode = if ($parallelExecution -eq 'true') { 'p' } else { 's' }
+        $issues = New-Object System.Collections.Generic.List[object]
 
         if ((Test-CategoryEnabled -Category 'ST') -and $strategyCode -ne 'p') {
             $hasException = Test-ExceptionMatch -Tokens $descriptionTokens -Key 'ST' -Value $strategyCode
-            $issueList = New-Object System.Collections.Generic.List[object]
             $strategyLabel = if ($strategyCode -eq 'p') { 'parallel' } else { 'sequential' }
             if (-not $hasException) {
-                $issueList.Add((New-ValidationIssue -Category 'ST' -Code $strategyCode -Message "Resource usage strategy is $($strategyLabel) (expected parallel)."))
+                $issues.Add((New-ValidationIssue -Category 'ST' -Code $strategyCode -Message "Resource usage strategy is $($strategyLabel) (expected parallel)."))
             } elseif ($ShowExceptions) {
-                $issueList.Add((New-ValidationIssue -Category 'ST' -Code $strategyCode -Message 'Exception configured.'))
+                $issues.Add((New-ValidationIssue -Category 'ST' -Code $strategyCode -Message 'Exception configured.'))
             }
+        }
 
-            if ($issueList.Count -gt 0) {
-                $script:scenarioResults[$ScenarioInfo.Name].Mappings += [PSCustomObject]@{
-                    Name = $mappingName
-                    Path = $FilePath
-                    Issues = $issueList
-                }
+        foreach ($issue in (Invoke-CodeScanRules -ArtifactType 'MessageMapping' -Content $RawContent)) {
+            $issues.Add($issue)
+        }
+
+        if ($issues.Count -gt 0) {
+            $script:scenarioResults[$ScenarioInfo.Name].Mappings += [PSCustomObject]@{
+                Name = $mappingName
+                Path = $FilePath
+                Issues = $issues
             }
         }
     }
@@ -685,6 +773,7 @@ $fileIndex = 0
 foreach ($file in $files) {
     $fileIndex += 1
     $filePath = $file.FullName
+    $fileContent = $null
 
     if ($treatPathAsSingleScenario) {
         $rootItem = Get-Item -Path $resolvedPath
@@ -699,7 +788,8 @@ foreach ($file in $files) {
     Update-ValidationProgress -Activity 'Validate scenarios' -Current $fileIndex -Total $files.Count -Status "Folder files ($($fileIndex)/$($files.Count)): $($file.Name)"
 
     try {
-        $xmlContent = Get-XmlDocument -FilePath $filePath
+        $fileContent = Get-Content -Path $filePath -Raw
+        $xmlContent = Get-XmlDocument -RawContent $fileContent
     } catch {
         Write-Warning "Error processing file: $($filePath)"
         Write-Warning $($_.Exception.Message)
@@ -707,7 +797,7 @@ foreach ($file in $files) {
     }
 
     $totalFilesProcessed += 1
-    Add-ScenarioResult -ScenarioInfo $scenarioInfo -FileName $file.Name -FilePath $filePath -XmlContent $xmlContent
+    Add-ScenarioResult -ScenarioInfo $scenarioInfo -FileName $file.Name -FilePath $filePath -XmlContent $xmlContent -RawContent $fileContent
 }
 
 if ($files.Count -gt 0) {
@@ -774,14 +864,14 @@ foreach ($pscFile in $pscFiles) {
             }
 
             try {
-                [xml]$xmlContent = $entryContent
+                $xmlContent = Get-XmlDocument -RawContent $entryContent
             } catch {
                 Write-Warning "Entry '$($entry.FullName)' in archive '$($pscFile.Name)' is not valid XML: $($_.Exception.Message)"
                 continue
             }
 
             $totalFilesProcessed += 1
-            Add-ScenarioResult -ScenarioInfo $scenarioInfo -FileName $entryName -FilePath $entryPath -XmlContent $xmlContent
+            Add-ScenarioResult -ScenarioInfo $scenarioInfo -FileName $entryName -FilePath $entryPath -XmlContent $xmlContent -RawContent $entryContent
         }
     } finally {
         $zipArchive.Dispose()

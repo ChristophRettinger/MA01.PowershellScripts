@@ -33,6 +33,7 @@ Prüfkategorien (`ErrorCategories`):
 - `SI` (Input Signal)
 - `BK` (Business Keys)
 - `ST` (Resource usage strategy für Channel/Mapping)
+- `RG` (Regex Guard für musterbasierte Inhalte in ProcessModel/MessageMapping)
 
 ## Pfadverhalten (`-Path`)
 
@@ -84,6 +85,13 @@ Hinweise zur Herleitung von `ST`:
 - Bei `MessageMapping_*` wird `ST` aus `parallelExecution` abgeleitet (`false` => `s`, `true` => `p`).
 - Sequential `ST:s` bei Channel/Mapping ist zulässig, wenn **alle** Process Models des Scenarios sequential sind (`isFifo:true`, `isGroupedFifo:false`, `bestEffortLimit:0`, `pipelineMode:false`).
 
+## Regex Guard Regeln (`RG`)
+
+- RG fasst alle regex-basierten Prüfungen zusammen und erscheint im Output als Kategorie `RG:<Code>`.
+- Die Regeln liegen direkt im Script als `$codeScanRules`. Jede Regel definiert `Code`, `Message`, `Pattern`, optionale Regex-Optionen (z. B. `Singleline`) und die Ziel-Artefakte (`ProcessModel` oder `MessageMapping`).
+- Standardmäßig ist eine Regel aktiv, die `addBuKey(...SUBFL_stage)`-Aufrufe findet (`Code = nls`, Meldung "non-Local SUBFL_stage usage"), weil SUBFL_STAGE-Business Keys nur lokal erlaubt sind.
+- Ausnahmen können **nicht** über `description`-Tokens konfiguriert werden. Wer RG-Resultate für einen Lauf ausblenden möchte, entfernt `RG` via `-ErrorCategories`.
+
 ## Script-Parameter (Usage)
 
 ### Standardaufruf
@@ -98,7 +106,7 @@ Hinweise zur Herleitung von `ST`:
 - `-Mode` (default `Folder`): `Folder` oder `PSC`
 - `-IncludePsc` (switch): prüft im `Folder`-Mode zusätzlich `.psc`
 - `-Filter` (default `all`): Wildcard auf Scenario-Ordner bzw. PSC-Dateien
-- `-ErrorCategories`: Teilmenge von `PM,RS,MR,SI,BK,ST`
+- `-ErrorCategories`: Teilmenge von `PM,RS,MR,SI,BK,ST,RG`
 - `-MaxBusinessKeyCount` (default `6`): BK-Schwellwert
 - `-ShowExceptions` (switch): zeigt auch konfigurierte Ausnahmen
 - `-Output`: schreibt Report in Datei/Ordner
