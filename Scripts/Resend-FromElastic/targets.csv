@@ -1,5 +1,6 @@
 Name,URL
 dev01-wsk,https://dev01.esb.wienkav.at:8443/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
+test01-wsk,https://test01.esb.wienkav.at:8443/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
 prod01-wsk,https://prod01.esb.wienkav.at:8443/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
 prod02-wsk,https://prod02.esb.wienkav.at:8543/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
 prod03-wsk,https://prod03.esb.wienkav.at:8443/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
