@@ -958,7 +958,17 @@ for ($i = 0; $i -lt $records.Count; $i++) {
 }
 
 Write-Progress -Id 2 -Activity 'Resend processing' -Completed
-Write-RunLog -Level 'INFO' -Message "Finished. Successes: $($script:SuccessLog.Count), Errors: $($script:ErrorLog.Count)."
+$stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff')
+$successCount = $script:SuccessLog.Count
+$errorCount = $script:ErrorLog.Count
+Write-Host "[$stamp] [INFO] Finished. " -ForegroundColor Gray -NoNewline
+Write-Host "Successes: $successCount" -ForegroundColor $(if ($successCount -gt 0) { 'Green' } else { 'Gray' }) -NoNewline
+Write-Host ", " -ForegroundColor Gray -NoNewline
+Write-Host "Errors: $errorCount" -ForegroundColor $(if ($errorCount -gt 0) { 'Red' } else { 'Gray' }) -NoNewline
+Write-Host "." -ForegroundColor Gray
+if ($script:LogFilePath) {
+    Add-Content -Path $script:LogFilePath -Value "[$stamp] [INFO] Finished. Successes: $successCount, Errors: $errorCount."
+}
 if ($Mode -eq 'Curl' -and $script:CurlOutputFilePath) {
     Write-RunLog -Level 'INFO' -Message "Curl commands written to '$script:CurlOutputFilePath'."
 }
