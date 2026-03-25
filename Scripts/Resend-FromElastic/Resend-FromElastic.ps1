@@ -674,12 +674,12 @@ $Category = Normalize-FilterValues -Values $Category
 $Subcategory = Normalize-FilterValues -Values $Subcategory
 $HcmMsgEvent = Normalize-FilterValues -Values $HcmMsgEvent
 $Instance = Normalize-FilterValues -Values $Instance
-$Environment = Normalize-FilterValues -Values $Environment
+$EnvironmentFilters = Normalize-FilterValues -Values $Environment
 
 $effectiveFilterCount = 0
 if (-not [string]::IsNullOrWhiteSpace($ScenarioName)) { $effectiveFilterCount++ }
 if (-not [string]::IsNullOrWhiteSpace($ProcessName)) { $effectiveFilterCount++ }
-foreach ($arr in @($CaseNo,$PatientId,$SubId,$BusinessCaseId,$Category,$Subcategory,$HcmMsgEvent,$Instance,$Environment)) {
+foreach ($arr in @($CaseNo,$PatientId,$SubId,$BusinessCaseId,$Category,$Subcategory,$HcmMsgEvent,$Instance,$EnvironmentFilters)) {
     if ($arr -and @($arr | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") }).Count -gt 0) { $effectiveFilterCount++ }
 }
 if ($Stage) { $effectiveFilterCount++ }
@@ -751,7 +751,7 @@ $termFilters = @(
     (ConvertTo-ElasticTermsFilter -Field 'BK.SUBFL_subcategory' -Values $Subcategory),
     (ConvertTo-ElasticTermsFilter -Field 'BK._HCMMSGEVENT' -Values $HcmMsgEvent),
     (ConvertTo-ElasticTermsFilter -Field 'Instance' -Values $Instance),
-    (ConvertTo-ElasticTermsFilter -Field 'Environment' -Values $Environment)
+    (ConvertTo-ElasticTermsFilter -Field 'Environment' -Values $EnvironmentFilters)
 )
 
 foreach ($filter in $termFilters) {
