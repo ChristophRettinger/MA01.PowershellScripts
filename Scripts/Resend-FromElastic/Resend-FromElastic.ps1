@@ -55,6 +55,12 @@
 .PARAMETER Stage
     BK.SUBFL_stage filter (Input, Map, Resolve, Output).
 
+.PARAMETER WorkflowPattern
+    WorkflowPattern filter. Accepts literal values or wildcard expressions.
+
+.PARAMETER ErrorOnly
+    Convenience switch to filter WorkflowPattern to 'ERROR'. Cannot be combined with WorkflowPattern values other than 'ERROR'.
+
 .PARAMETER Category
     BK.SUBFL_category filter values.
 
@@ -145,6 +151,12 @@ param(
     [ValidateSet('Input','Map','Resolve','Output')]
     [Parameter(Mandatory=$false)]
     [string]$Stage,
+
+    [Parameter(Mandatory=$false)]
+    [string]$WorkflowPattern,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$ErrorOnly,
 
     [Parameter(Mandatory=$false)]
     [string[]]$Category,
@@ -598,6 +610,21 @@ function Update-ResendProgressStatus {
     Write-Progress -Id 2 -Activity 'Resend processing' -Status $statusLine -PercentComplete $PercentComplete
 }
 
+if ($null -ne $WorkflowPattern) {
+    $WorkflowPattern = $WorkflowPattern.Trim()
+    if ([string]::IsNullOrWhiteSpace($WorkflowPattern)) {
+        $WorkflowPattern = $null
+    }
+}
+
+if ($ErrorOnly.IsPresent) {
+    $errorPatternValue = 'ERROR'
+    if (-not [string]::IsNullOrWhiteSpace($WorkflowPattern) -and -not $WorkflowPattern.Equals($errorPatternValue, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw '-ErrorOnly cannot be combined with WorkflowPattern values other than ERROR.'
+    }
+    $WorkflowPattern = $errorPatternValue
+}
+
 if ($StartDate -gt $EndDate) {
     throw 'StartDate must be less than or equal to EndDate.'
 }
@@ -627,6 +654,7 @@ foreach ($arr in @($CaseNo,$PatientId,$SubId,$BusinessCaseId,$Category,$Subcateg
     if ($arr -and @($arr | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") }).Count -gt 0) { $effectiveFilterCount++ }
 }
 if ($Stage) { $effectiveFilterCount++ }
+if (-not [string]::IsNullOrWhiteSpace($WorkflowPattern)) { $effectiveFilterCount++ }
 if ($effectiveFilterCount -eq 0) {
     throw 'At least one filter parameter must be provided.'
 }
@@ -671,6 +699,13 @@ if (-not [string]::IsNullOrWhiteSpace($ProcessName)) {
 }
 if ($Stage) {
     $mustClauses += @{ term = @{ 'BK.SUBFL_stage' = $Stage } }
+}
+if (-not [string]::IsNullOrWhiteSpace($WorkflowPattern)) {
+    if ($WorkflowPattern -match '[*?]') {
+        $mustClauses += @{ wildcard = @{ WorkflowPattern = @{ value = $WorkflowPattern } } }
+    } else {
+        $mustClauses += @{ term = @{ WorkflowPattern = $WorkflowPattern } }
+    }
 }
 
 $termFilters = @(
@@ -728,7 +763,7 @@ $body = @{
     sort = @(@{ '@timestamp' = @{ order = 'asc' } })
     query = @{ bool = $boolQuery }
     _source = @(
-        '@timestamp','ScenarioName','ProcessName','BusinessCaseId','MSGID','MessageData1','MessageData2',
+        '@timestamp','ScenarioName','ProcessName','WorkflowPattern','BusinessCaseId','MSGID','MessageData1','MessageData2',
         'BK.SUBFL_stage','BK.SUBFL_messagetype','BK.SUBFL_category','BK.SUBFL_subcategory','BK._HCMMSGEVENT','BK.*',
         'Instance','Environment'
     )
