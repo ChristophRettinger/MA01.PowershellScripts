@@ -20,10 +20,10 @@
     record (lowest @timestamp) is kept for processing.
 
 .PARAMETER StartDate
-    Inclusive start timestamp for Elasticsearch filtering. Defaults to now minus 7 days.
+    Inclusive start timestamp for Elasticsearch filtering (interpreted as local time unless explicitly marked as UTC). Defaults to now minus 7 days.
 
 .PARAMETER EndDate
-    Inclusive end timestamp for Elasticsearch filtering. Defaults to now.
+    Inclusive end timestamp for Elasticsearch filtering (interpreted as local time unless explicitly marked as UTC). Defaults to now.
 
 .PARAMETER ElasticUrl
     Elasticsearch _search endpoint URL.
@@ -311,6 +311,31 @@ function Write-RunLog {
     Write-Host $line -ForegroundColor $levelColor
     if ($script:LogFilePath) {
         Add-Content -Path $script:LogFilePath -Value $line
+    }
+}
+
+function Convert-DateTimeToUtcWindow {
+    param(
+        [Parameter(Mandatory=$true)]
+        [datetime]$DateTimeValue
+    )
+
+    $inputValue = $DateTimeValue
+    $effectiveValue = $DateTimeValue
+    if ($effectiveValue.Kind -eq [System.DateTimeKind]::Unspecified) {
+        $effectiveValue = [System.DateTime]::SpecifyKind($effectiveValue, [System.DateTimeKind]::Local)
+    }
+
+    $localValue = if ($effectiveValue.Kind -eq [System.DateTimeKind]::Local) { $effectiveValue } else { $effectiveValue.ToLocalTime() }
+    $utcValue = $effectiveValue.ToUniversalTime()
+
+    return [pscustomobject]@{
+        Input = $inputValue
+        InputIso = $inputValue.ToString('o')
+        Local = $localValue
+        LocalIso = $localValue.ToString('o')
+        Utc = $utcValue
+        UtcIso = $utcValue.ToString('o')
     }
 }
 
@@ -630,6 +655,9 @@ if ($StartDate -gt $EndDate) {
     throw 'StartDate must be less than or equal to EndDate.'
 }
 
+$startWindow = Convert-DateTimeToUtcWindow -DateTime $StartDate
+$endWindow = Convert-DateTimeToUtcWindow -DateTime $EndDate
+
 if ($BusinessCaseId -and -not $PSBoundParameters.ContainsKey('Stage')) {
     $Stage = 'Input'
 }
@@ -688,8 +716,10 @@ if (($Action -eq 'Send' -or $Action -eq 'Test') -and [string]::IsNullOrWhiteSpac
 
 $headers = @{ 'Content-Type' = 'application/json'; 'Authorization' = "ApiKey $(Resolve-ApiKey)" }
 
+$timestampRange = @{ gte = $startWindow.UtcIso; lte = $endWindow.UtcIso }
+
 $mustClauses = @(
-    @{ range = @{ '@timestamp' = @{ gte = $StartDate.ToString('o'); lte = $EndDate.ToString('o') } } }
+    @{ range = @{ '@timestamp' = $timestampRange } }
 )
 
 if (-not [string]::IsNullOrWhiteSpace($ScenarioName)) {
@@ -782,7 +812,7 @@ if ($Action -eq 'ShowQuery') {
     return
 }
 
-Write-RunLog -Level 'INFO' -Message "Running Elasticsearch query from $($StartDate.ToString('o')) to $($EndDate.ToString('o'))."
+Write-RunLog -Level 'INFO' -Message ("Running Elasticsearch query from {0} (UTC {1}) to {2} (UTC {3})." -f $startWindow.LocalIso, $startWindow.UtcIso, $endWindow.LocalIso, $endWindow.UtcIso)
 $hits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Body $body -Headers $headers -OnPage {
     param($page, $pageHits, $total)
     Write-Progress -Id 1 -Activity 'Elasticsearch query' -Status "Loaded page $page, total records $total" -PercentComplete -1
