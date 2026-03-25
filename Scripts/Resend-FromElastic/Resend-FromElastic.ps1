@@ -77,7 +77,7 @@
     Environment filter values. Valid options: development, testing, staging, production.
 
 .PARAMETER Action
-    Query, Send, or Test. Defaults to Query.
+    Query, Send, Test, or ShowQuery (prints the Elasticsearch request and exits). Defaults to Query.
 
 .PARAMETER Target
     Target name resolved from targets.csv (columns Name,URL); supports tab completion from Name values.
@@ -174,7 +174,7 @@ param(
     [Parameter(Mandatory=$false)]
     [string[]]$Environment,
 
-    [ValidateSet('Query','Send','Test')]
+    [ValidateSet('Query','Send','Test','ShowQuery')]
     [Parameter(Mandatory=$false)]
     [string]$Action = 'Query',
 
@@ -661,7 +661,7 @@ if ($effectiveFilterCount -eq 0) {
 }
 
 if ($Mode -eq 'Curl') {
-    if ($Action -eq 'Query') {
+    if ($Action -in @('Query','ShowQuery')) {
         throw 'Mode Curl requires Action Send or Test.'
     }
     if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
@@ -768,6 +768,18 @@ $body = @{
         'BK.SUBFL_stage','BK.SUBFL_messagetype','BK.SUBFL_category','BK.SUBFL_subcategory','BK._HCMMSGEVENT','BK.*',
         'Instance','Environment'
     )
+}
+
+if ($Action -eq 'ShowQuery') {
+    $preview = [ordered]@{
+        ElasticUrl = $ElasticUrl
+        Headers = $headers
+        Body = $body
+    }
+    $json = $preview | ConvertTo-Json -Depth 10
+    Write-Host 'ShowQuery selected; request will not be executed.' -ForegroundColor Yellow
+    Write-Host $json
+    return
 }
 
 Write-RunLog -Level 'INFO' -Message "Running Elasticsearch query from $($StartDate.ToString('o')) to $($EndDate.ToString('o'))."
