@@ -170,7 +170,7 @@ param(
     [Parameter(Mandatory=$false)]
     [string[]]$Instance,
 
-    [ValidateSet('development','testing','staging','production')]
+    [ValidateSet('development','testing','staging','production', IgnoreCase=$true)]
     [Parameter(Mandatory=$false)]
     [string[]]$Environment,
 
