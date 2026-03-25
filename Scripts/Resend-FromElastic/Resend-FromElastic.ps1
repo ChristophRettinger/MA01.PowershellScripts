@@ -74,7 +74,7 @@
     Instance filter values.
 
 .PARAMETER Environment
-    Environment filter values.
+    Environment filter values. Valid options: development, testing, staging, production.
 
 .PARAMETER Action
     Query, Send, or Test. Defaults to Query.
@@ -170,6 +170,7 @@ param(
     [Parameter(Mandatory=$false)]
     [string[]]$Instance,
 
+    [ValidateSet('development','testing','staging','production')]
     [Parameter(Mandatory=$false)]
     [string[]]$Environment,
 
