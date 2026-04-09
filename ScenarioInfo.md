@@ -26,7 +26,7 @@ A `.psc` file is a zipped scenario folder (the folder contents, not the folder i
 
 ## Scenario usage feature scan notes
 
-`Show-ScenarioUsages` scans scenario folders similarly to `Validate-Scenarios` (root folder or direct scenario folder path) and evaluates predefined usage codes against scenario artifacts. Current checks include ErrorHandling references in `ProcessModell_*`, legacy `SUBFL.Log` usage in scenario files, and one-shape/Transmission message mapping markers in `MessageMapping_*`. The script supports filtering by scenario name, feature code, and feature type (Desired, Information, Warning).
+`Show-ScenarioUsages` scans scenario folders similarly to `Validate-Scenarios` (root folder or direct scenario folder path) and evaluates predefined usage codes against scenario artifacts. Current checks include ErrorHandling references in `ProcessModell_*`, legacy `SUBFL.Log` usage in scenario files, and one-shape/Transmission message mapping markers in `MessageMapping_*`. The script supports filtering by scenario name, feature code, and feature type (Desired, Information, Warning), and can optionally print per-hit evidence paths via `-Evidence` (off by default).
 
 ## Process model files (`ProcessModell_*`)
 

@@ -22,8 +22,14 @@
 .PARAMETER CodeTypes
     Optional list of feature code types to evaluate (Desired, Information, Warning).
 
+.PARAMETER Evidence
+    Include evidence file paths for each matched code. Disabled by default.
+
 .EXAMPLE
     .\Show-ScenarioUsages.ps1 -Path 'D:\Scenarios' -CodeTypes Desired,Warning
+
+.EXAMPLE
+    .\Show-ScenarioUsages.ps1 -Path 'D:\Scenarios' -Evidence
 #>
 
 param (
@@ -38,7 +44,10 @@ param (
 
     [Parameter(Mandatory = $false)]
     [ValidateSet('Desired', 'Information', 'Warning')]
-    [string[]]$CodeTypes
+    [string[]]$CodeTypes,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Evidence
 )
 
 $resolvedPath = (Resolve-Path -Path $Path).Path
@@ -340,7 +349,9 @@ foreach ($scenario in $scenarioItems) {
         $codeTotals[$hit.Code] = $codeTotals[$hit.Code] + 1
         $typeColor = if ($colorByType.ContainsKey($hit.Type)) { $colorByType[$hit.Type] } else { 'Gray' }
         Write-Host ("  [$($hit.Code)] [$($hit.Type)] $($hit.Description)") -ForegroundColor $typeColor
-        Write-Host ("    Evidence: $($hit.Evidence)") -ForegroundColor DarkGray
+        if ($Evidence) {
+            Write-Host ("    Evidence: $($hit.Evidence)") -ForegroundColor DarkGray
+        }
     }
 
     Write-Host ''
