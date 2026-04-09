@@ -24,6 +24,10 @@ A `.psc` file is a zipped scenario folder (the folder contents, not the folder i
 - The initial rule flags `addBuKey(...SUBFL_stage)` usage (issue code `RG:nls`) to highlight non-local SUBFL stage calls.
 - Description field exception codes do not suppress RG warnings; exclude RG via `-ErrorCategories` when you must temporarily ignore these findings.
 
+## Scenario usage feature scan notes
+
+`Show-ScenarioUsages` scans scenario folders similarly to `Validate-Scenarios` (root folder or direct scenario folder path) and evaluates predefined usage codes against scenario artifacts. Current checks include ErrorHandling references in `ProcessModell_*`, legacy `SUBFL.Log` usage in scenario files, and one-shape/Transmission message mapping markers in `MessageMapping_*`. The script supports filtering by scenario name, feature code, and feature type (Desired, Information, Warning).
+
 ## Process model files (`ProcessModell_*`)
 
 Process model files are XML documents named `ProcessModell_*` (no extension).
