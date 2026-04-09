@@ -106,6 +106,11 @@
 .PARAMETER OutputDirectory
     Optional output directory for logs.
 
+.PARAMETER Replacements
+    Optional search/replace list applied to MessageData1 and business-key values before replay.
+    Provide an even number of values where each pair is SearchPattern,ReplacementValue.
+    Replacements use regular-expression semantics.
+
 .PARAMETER Mode
     Batch, All, Single, or Curl processing behavior. Defaults to Batch.
     Curl mode writes curl commands to a file in OutputDirectory and does not emit
@@ -222,6 +227,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory,
+
+    [Parameter(Mandatory=$false)]
+    [string[]]$Replacements,
 
     [ValidateSet('Batch','All','Single','Curl')]
     [Parameter(Mandatory=$false)]
@@ -555,7 +563,10 @@ function Get-SourceInfoXml {
 }
 
 function ConvertTo-BusinessKeysString {
-    param([object]$Source)
+    param(
+        [object]$Source,
+        [object[]]$ReplacementPairs
+    )
 
     $excludedKeys = @(
         'SUBFL_stage','SUBFL_party','SUBFL_name','SUBFL_history','SUBFL_subid',
@@ -567,6 +578,7 @@ function ConvertTo-BusinessKeysString {
         if ($excludedKeys -contains $prop.Name) { continue }
 
         $value = if ($null -eq $prop.Value) { '' } else { "$($prop.Value)" }
+        $value = Apply-RegexReplacements -InputText $value -ReplacementPairs $ReplacementPairs
         $parts.Add("$($prop.Name):$value") | Out-Null
     }
 
@@ -636,6 +648,52 @@ function Update-ResendProgressStatus {
     Write-Progress -Id 2 -Activity 'Resend processing' -Status $statusLine -PercentComplete $PercentComplete
 }
 
+function ConvertTo-ReplacementPairs {
+    param([string[]]$Values)
+
+    if (-not $Values -or $Values.Count -eq 0) {
+        return @()
+    }
+
+    if (($Values.Count % 2) -ne 0) {
+        throw 'Replacements requires an even number of values (search/replace pairs).'
+    }
+
+    $pairs = [System.Collections.Generic.List[object]]::new()
+    for ($i = 0; $i -lt $Values.Count; $i += 2) {
+        $searchPattern = if ($null -eq $Values[$i]) { '' } else { "$($Values[$i])" }
+        $replacementValue = if ($null -eq $Values[$i + 1]) { '' } else { "$($Values[$i + 1])" }
+        $pairs.Add([pscustomobject]@{
+            SearchPattern = $searchPattern
+            ReplacementValue = $replacementValue
+        }) | Out-Null
+    }
+
+    return @($pairs)
+}
+
+function Apply-RegexReplacements {
+    param(
+        [AllowNull()][string]$InputText,
+        [object[]]$ReplacementPairs
+    )
+
+    if ($null -eq $InputText -or -not $ReplacementPairs -or $ReplacementPairs.Count -eq 0) {
+        return $InputText
+    }
+
+    $updated = $InputText
+    foreach ($pair in $ReplacementPairs) {
+        try {
+            $updated = [regex]::Replace($updated, "$($pair.SearchPattern)", "$($pair.ReplacementValue)")
+        } catch {
+            throw "Invalid replacement pattern '$($pair.SearchPattern)': $($_.Exception.Message)"
+        }
+    }
+
+    return $updated
+}
+
 if ($null -ne $WorkflowPattern) {
     $WorkflowPattern = $WorkflowPattern.Trim()
     if ([string]::IsNullOrWhiteSpace($WorkflowPattern)) {
@@ -675,6 +733,7 @@ $Subcategory = Normalize-FilterValues -Values $Subcategory
 $HcmMsgEvent = Normalize-FilterValues -Values $HcmMsgEvent
 $Instance = Normalize-FilterValues -Values $Instance
 $EnvironmentFilters = Normalize-FilterValues -Values $Environment
+$ReplacementPairs = ConvertTo-ReplacementPairs -Values $Replacements
 
 $effectiveFilterCount = 0
 if (-not [string]::IsNullOrWhiteSpace($ScenarioName)) { $effectiveFilterCount++ }
@@ -708,6 +767,10 @@ if ($OutputDirectory) {
         $script:CurlOutputFilePath = Join-Path -Path $OutputDirectory -ChildPath ("Resend-FromElastic_{0}.curl.txt" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
         New-Item -Path $script:CurlOutputFilePath -ItemType File -Force | Out-Null
     }
+}
+
+if ($ReplacementPairs.Count -gt 0) {
+    Write-RunLog -Level 'INFO' -Message "Configured $($ReplacementPairs.Count) replacement pair(s) for payload and business-key value updates."
 }
 
 if (($Action -eq 'Send' -or $Action -eq 'Test') -and [string]::IsNullOrWhiteSpace($Target)) {
@@ -926,6 +989,7 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     if ($stopRequested) { break }
 
     $messageData1 = "$(Get-ElasticSourceValue -Source $current -FieldPath 'MessageData1')"
+    $messageData1 = Apply-RegexReplacements -InputText $messageData1 -ReplacementPairs $ReplacementPairs
     if ($CleanupEnvelope) {
         $messageData1 = Cleanup-EnvelopeData -XmlText $messageData1
     }
@@ -938,7 +1002,7 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     $headersOut = @{
         'SourceInfoMsg' = (Get-SourceInfoXml -Source $current -SubscriptionFilterParty $TargetParty -SubscriptionFilterId $TargetSubId -ResolvedProcessState $ProcessState -TargetName $Target)
         'SUBFL_source_host' = 'ElasticReinject'
-        'BuKeysString' = (ConvertTo-BusinessKeysString -Source $current)
+        'BuKeysString' = (ConvertTo-BusinessKeysString -Source $current -ReplacementPairs $ReplacementPairs)
         '_MSGID' = $(if ($NewBusinessCaseIds.IsPresent) { '' } else { $msgId })
         '_GROUPBY' = ''
         '_SOURCE' = 'ElasticReinject'
