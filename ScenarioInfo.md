@@ -209,6 +209,10 @@ When the current commit is not directly tagged, the status column shows the most
 For grouping stability, the script supports a settings file with `regex;replacement` normalization rules that are applied before aggregation.
 The summary output tracks first/last occurrence, count, severity, flattened statement text, and the first stacktrace line.
 
+## HL7 message send notes
+
+`Send-HL7Message` reads HL7 input files as UTF-8, normalizes segment separators to CR, and sends payloads via TLS/MLLP with configurable wire encoding (for example `ISO-8859-1`). It extracts MLLP-framed replies, either prints a colorized HL7 response (separator set `|`, `^`, `~`, `\`, `&`) or saves the response to a UTF-8 file.
+
 ## Elastic resend operation notes
 
 `Resend-FromElastic` supports operational SUBFL replay workflows by querying Elasticsearch with stage/category/MSGID filters, keeping only the oldest hit per BusinessCaseId/MSGID, and replaying payloads in batch, all-at-once, or interactive single-step mode with keyboard controls (P/R/S/X) shown in the processing progress bar while records are running. It can perform dry-run validation via `Action Test`, write per-record curl POST commands via `Mode Curl` (output file in `OutputDirectory`, no curl line console echo), writes timestamped success/error logs, reads resend endpoint definitions from `targets.csv`, tab-completes `Target` values from CSV `Name` entries, and can emit SourceInfo subscription filters through `TargetParty` and `TargetSubId`. Optional `Replacements` pairs allow regex-based search/replace updates on `MessageData1` and outgoing business-key values before replay. Multi-value filter parameters also normalize comma-separated input into distinct values so array filters apply as Elasticsearch OR terms. The script now initializes `System.Xml.Linq` explicitly so envelope cleanup remains available in hosts where the assembly is not preloaded.
