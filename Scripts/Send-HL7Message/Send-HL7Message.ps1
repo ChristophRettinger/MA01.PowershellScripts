@@ -3,7 +3,9 @@
     Sends an HL7 message over MLLP (plain TCP or TLS) and shows or saves the server response.
 
 .DESCRIPTION
-    This script reads an HL7 input file as UTF-8, normalizes line endings to CR, and sends it as an MLLP frame.
+    This script can either read an HL7 input file as UTF-8 or build a simple request message dynamically.
+    File-based input is normalized to CR segment separators before sending as an MLLP frame.
+    Dynamic mode creates an MSH+QRD request using the current timestamp and mandatory AID/message values.
     Use -Protocol Tcp for plain TCP, -Protocol Tls for TLS without a client certificate, or -Protocol TlsWithCertificate for mTLS.
     The sending wire encoding can be selected with -Encoding.
 
@@ -18,7 +20,16 @@
     Target TCP port.
 
 .PARAMETER Path
-    Input HL7 message file path.
+    Input HL7 message file path (file mode).
+
+.PARAMETER Message
+    HL7 query message code used in dynamic mode (for example A19).
+
+.PARAMETER Sender
+    Sender/facility value used in dynamic mode. Defaults to ARIA.
+
+.PARAMETER AID
+    Query identifier value used in dynamic mode (for example "91732460    15044232").
 
 .PARAMETER Encoding
     Character encoding used when converting message text to bytes for sending and when decoding the response.
@@ -44,6 +55,9 @@
 .EXAMPLE
     .\Send-HL7Message.ps1 -HostName stammdatenabfrage-2100.esb.gesundheitsverbund.at -Port 443 -Path .\A19_MAC_Aria.hl7 -Encoding ISO-8859-1
 
+.EXAMPLE
+    .\Send-HL7Message.ps1 -HostName host -Port 2100 -Message A19 -AID "91732460    15044232"
+
 .NOTES
     - Input files are always read as UTF-8.
     - Output files are always written as UTF-8.
@@ -55,9 +69,21 @@ param(
     [Parameter(Mandatory)]
     [int]$Port,
 
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory, ParameterSetName = 'FromFile')]
     [ValidateNotNullOrEmpty()]
     [string]$Path,
+
+    [Parameter(Mandatory, ParameterSetName = 'Dynamic')]
+    [ValidateNotNullOrEmpty()]
+    [string]$Message,
+
+    [Parameter(ParameterSetName = 'Dynamic')]
+    [ValidateNotNullOrEmpty()]
+    [string]$Sender = 'ARIA',
+
+    [Parameter(Mandatory, ParameterSetName = 'Dynamic')]
+    [ValidateNotNullOrEmpty()]
+    [string]$AID,
 
     [ValidateSet('ISO-8859-1', 'UTF-8')]
     [string]$Encoding = 'ISO-8859-1',
@@ -186,8 +212,28 @@ function Test-ServerCertificate {
     return $false
 }
 
-if (-not (Test-Path -Path $Path -PathType Leaf)) {
-    throw "Input HL7 file not found: $($Path)"
+function Get-RequestMessage {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ActiveParameterSetName
+    )
+
+    if ($ActiveParameterSetName -eq 'FromFile') {
+        if (-not (Test-Path -Path $Path -PathType Leaf)) {
+            throw "Input HL7 file not found: $($Path)"
+        }
+
+        $fileMessage = Get-Content -Path $Path -Raw -Encoding UTF8
+        $fileMessage = $fileMessage -replace "`r`n", "`r"
+        $fileMessage = $fileMessage -replace "`n", "`r"
+        return $fileMessage.TrimEnd("`r")
+    }
+
+    $timestamp = Get-Date -Format 'yyyyMMddHHmmss'
+    $messageControlId = "MCID_$($timestamp)"
+    $queryId = "QID_$($timestamp)"
+
+    return "MSH|^~\&|$($Sender)|$($Sender)|Orch|Orch|$($timestamp)||QRY^$($Message)|$($messageControlId)|P|2.4`rQRD|$($timestamp)|R|I|$($queryId)|||1^RD|$($AID)|MAC"
 }
 
 try {
@@ -212,10 +258,12 @@ if ($Protocol -ne 'TlsWithCertificate' -and $CertificatePath) {
     Write-Warning '-CertificatePath was provided but is ignored unless -Protocol TlsWithCertificate is used.'
 }
 
-$hl7Message = Get-Content -Path $Path -Raw -Encoding UTF8
-$hl7Message = $hl7Message -replace "`r`n", "`r"
-$hl7Message = $hl7Message -replace "`n", "`r"
-$hl7Message = $hl7Message.TrimEnd("`r")
+$hl7Message = Get-RequestMessage -ActiveParameterSetName $PSCmdlet.ParameterSetName
+
+Write-Host 'Request message:'
+Write-Host
+Write-Hl7Colorized -Message $hl7Message
+Write-Host
 
 $tcpClient = $null
 $sslStream = $null
