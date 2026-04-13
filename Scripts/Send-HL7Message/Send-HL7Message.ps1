@@ -283,7 +283,8 @@ try {
         }
 
         if ($bytesRead -gt 0) {
-            $responseBytes.AddRange($buffer[0..($bytesRead - 1)])
+            [byte[]]$chunk = $buffer[0..($bytesRead - 1)]
+            $responseBytes.AddRange($chunk)
             if ($responseBytes.Contains($EB)) {
                 $foundEndByte = $true
             }
