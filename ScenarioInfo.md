@@ -211,7 +211,7 @@ The summary output tracks first/last occurrence, count, severity, flattened stat
 
 ## HL7 message send notes
 
-`Send-HL7Message` reads HL7 input files as UTF-8, normalizes segment separators to CR, and sends payloads via TLS/MLLP with configurable wire encoding (for example `ISO-8859-1`). It extracts MLLP-framed replies, either prints a colorized HL7 response (separator set `|`, `^`, `~`, `\`, `&`) or saves the response to a UTF-8 file.
+`Send-HL7Message` reads HL7 input files as UTF-8, normalizes segment separators to CR, and sends payloads via MLLP using `-Protocol Tcp`, `-Protocol Tls`, or `-Protocol TlsWithCertificate`, with configurable wire encoding (for example `ISO-8859-1`). It extracts MLLP-framed replies, either prints a colorized HL7 response (separator set `|`, `^`, `~`, `\`, `&`) or saves the response to a UTF-8 file.
 
 ## Elastic resend operation notes
 

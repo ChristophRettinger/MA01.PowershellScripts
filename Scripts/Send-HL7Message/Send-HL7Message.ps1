@@ -1,9 +1,10 @@
 <#
 .SYNOPSIS
-    Sends an HL7 message over TLS/MLLP and shows or saves the server response.
+    Sends an HL7 message over MLLP (plain TCP or TLS) and shows or saves the server response.
 
 .DESCRIPTION
-    This script reads an HL7 input file as UTF-8, normalizes line endings to CR, and sends it as an MLLP frame to a TLS endpoint.
+    This script reads an HL7 input file as UTF-8, normalizes line endings to CR, and sends it as an MLLP frame.
+    Use -Protocol Tcp for plain TCP, -Protocol Tls for TLS without a client certificate, or -Protocol TlsWithCertificate for mTLS.
     The sending wire encoding can be selected with -Encoding.
 
     The server response is decoded with the same encoding, extracted from MLLP framing (if present), and either:
@@ -22,11 +23,14 @@
 .PARAMETER Encoding
     Character encoding used when converting message text to bytes for sending and when decoding the response.
 
+.PARAMETER Protocol
+    Transport protocol: Tcp, Tls, or TlsWithCertificate.
+
 .PARAMETER CACertPath
-    Optional CA certificate path used to validate an otherwise untrusted server chain root.
+    Optional CA certificate path used to validate an otherwise untrusted server chain root (TLS/TlsWithCertificate mode only).
 
 .PARAMETER CertificatePath
-    Optional client certificate path for mTLS.
+    Optional client certificate path used only with Protocol TlsWithCertificate.
 
 .PARAMETER CertificatePassword
     Optional client certificate password.
@@ -57,6 +61,9 @@ param(
 
     [ValidateNotNullOrEmpty()]
     [string]$Encoding = 'ISO-8859-1',
+
+    [ValidateSet('Tcp', 'Tls', 'TlsWithCertificate')]
+    [string]$Protocol = 'Tcp',
 
     [string]$CACertPath,
     [string]$CertificatePath,
@@ -195,6 +202,16 @@ if ($CACertPath) {
     Write-Host "Loaded CA certificate: $($script:CaCertificate.Subject)"
 }
 
+$useTls = $Protocol -in @('Tls', 'TlsWithCertificate')
+
+if ($Protocol -eq 'TlsWithCertificate' -and -not $CertificatePath) {
+    throw '-Protocol TlsWithCertificate requires -CertificatePath.'
+}
+
+if ($Protocol -ne 'TlsWithCertificate' -and $CertificatePath) {
+    Write-Warning '-CertificatePath was provided but is ignored unless -Protocol TlsWithCertificate is used.'
+}
+
 $hl7Message = Get-Content -Path $Path -Raw -Encoding UTF8
 $hl7Message = $hl7Message -replace "`r`n", "`r"
 $hl7Message = $hl7Message -replace "`n", "`r"
@@ -202,6 +219,7 @@ $hl7Message = $hl7Message.TrimEnd("`r")
 
 $tcpClient = $null
 $sslStream = $null
+$connectionStream = $null
 
 try {
     $tcpClient = New-Object System.Net.Sockets.TcpClient
@@ -210,33 +228,44 @@ try {
 
     Write-Host "Connected TCP socket to $($HostName):$($Port)."
 
-    $sslStream = New-Object System.Net.Security.SslStream(
-        $tcpClient.GetStream(),
-        $false,
-        { param($sender, $serverCertificate, $chain, $sslPolicyErrors) Test-ServerCertificate $sender $serverCertificate $chain $sslPolicyErrors }
-    )
+    if ($useTls) {
+        $sslStream = New-Object System.Net.Security.SslStream(
+            $tcpClient.GetStream(),
+            $false,
+            { param($sender, $serverCertificate, $chain, $sslPolicyErrors) Test-ServerCertificate $sender $serverCertificate $chain $sslPolicyErrors }
+        )
 
-    $clientCertificates = New-Object System.Security.Cryptography.X509Certificates.X509CertificateCollection
-    if ($CertificatePath) {
-        $clientCertificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($CertificatePath, $CertificatePassword)
-        $clientCertificates.Add($clientCertificate) | Out-Null
-        Write-Host "Loaded client certificate: $($clientCertificate.Subject)"
+        $clientCertificates = New-Object System.Security.Cryptography.X509Certificates.X509CertificateCollection
+        if ($Protocol -eq 'TlsWithCertificate') {
+            $clientCertificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($CertificatePath, $CertificatePassword)
+            $clientCertificates.Add($clientCertificate) | Out-Null
+            Write-Host "Loaded client certificate: $($clientCertificate.Subject)"
+        }
+
+        $sslStream.AuthenticateAsClient(
+            $HostName,
+            $clientCertificates,
+            [System.Security.Authentication.SslProtocols]::Tls12,
+            $true
+        )
+
+        Write-Host "TLS established. Protocol: $($sslStream.SslProtocol), Cipher: $($sslStream.CipherAlgorithm)."
+        $connectionStream = $sslStream
     }
+    else {
+        if ($CACertPath) {
+            Write-Warning '-CACertPath was provided with -Protocol Tcp. CA certificate is ignored in plain TCP mode.'
+        }
 
-    $sslStream.AuthenticateAsClient(
-        $HostName,
-        $clientCertificates,
-        [System.Security.Authentication.SslProtocols]::Tls12,
-        $true
-    )
-
-    Write-Host "TLS established. Protocol: $($sslStream.SslProtocol), Cipher: $($sslStream.CipherAlgorithm)."
+        Write-Host 'Using plain TCP MLLP (no TLS).'
+        $connectionStream = $tcpClient.GetStream()
+    }
 
     $payloadBytes = $wireEncoding.GetBytes($hl7Message)
     $frameBytes = [byte[]](@($SB) + $payloadBytes + @($EB, $CR))
 
-    $sslStream.Write($frameBytes, 0, $frameBytes.Length)
-    $sslStream.Flush()
+    $connectionStream.Write($frameBytes, 0, $frameBytes.Length)
+    $connectionStream.Flush()
 
     Write-Host "Message sent ($($frameBytes.Length) bytes including MLLP frame)."
 
@@ -246,7 +275,7 @@ try {
 
     do {
         try {
-            $bytesRead = $sslStream.Read($buffer, 0, $buffer.Length)
+            $bytesRead = $connectionStream.Read($buffer, 0, $buffer.Length)
         }
         catch [System.IO.IOException] {
             Write-Warning "Timeout while reading server response."
