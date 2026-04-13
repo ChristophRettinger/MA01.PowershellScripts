@@ -211,7 +211,7 @@ The summary output tracks first/last occurrence, count, severity, flattened stat
 
 ## HL7 message send notes
 
-`Send-HL7Message` sends HL7 payloads via MLLP using `-Protocol Tcp`, `-Protocol Tls`, or `-Protocol TlsWithCertificate`, with configurable wire encoding (for example `ISO-8859-1`). It supports file-based input (`-Path`) and dynamic request creation (`-Message` plus `-AID`, optional `-Sender` defaulting to `ARIA`) and prints the outbound request in color before sending. Replies are extracted from MLLP framing and either printed with colorized HL7 separators (`|`, `^`, `~`, `\`, `&`) or saved as UTF-8 via `-ResponsePath`.
+`Send-HL7Message` sends HL7 payloads via MLLP using `-Protocol Tcp`, `-Protocol Tls`, or `-Protocol TlsWithCertificate` with configurable wire encoding. It supports file-based input (`-Path`) and dynamic request creation (`-Message A19` plus `-AID`, optional `-Sender`), prints the outbound request in color, and can continue despite TLS certificate policy errors when `-IgnoreTlsError` is used (warnings are still written). Replies are extracted from MLLP framing and either printed with colorized HL7 separators (`|`, `^`, `~`, `\`, `&`) or saved as UTF-8 via `-ResponsePath`; if no response arrives, the script now emits an explicit error with protocol guidance.
 
 ## Elastic resend operation notes
 

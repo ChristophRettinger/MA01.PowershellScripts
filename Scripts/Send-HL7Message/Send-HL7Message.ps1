@@ -23,7 +23,7 @@
     Input HL7 message file path (file mode).
 
 .PARAMETER Message
-    HL7 query message code used in dynamic mode (for example A19).
+    HL7 query message code used in dynamic mode. Only A19 is supported.
 
 .PARAMETER Sender
     Sender/facility value used in dynamic mode. Defaults to ARIA.
@@ -48,6 +48,10 @@
 
 .PARAMETER ResponsePath
     Optional output file path for the response. When provided, response text is saved as UTF-8 instead of being colorized in console.
+
+.PARAMETER IgnoreTlsError
+    Allows TLS communication to continue even when certificate validation reports policy errors.
+    The certificate warning output is still written to help troubleshooting.
 
 .PARAMETER ReceiveTimeoutMs
     Socket read timeout in milliseconds.
@@ -75,6 +79,7 @@ param(
 
     [Parameter(Mandatory, ParameterSetName = 'Dynamic')]
     [ValidateNotNullOrEmpty()]
+    [ValidateSet('A19')]
     [string]$Message,
 
     [Parameter(ParameterSetName = 'Dynamic')]
@@ -95,6 +100,7 @@ param(
     [string]$CertificatePath,
     [string]$CertificatePassword,
     [string]$ResponsePath,
+    [switch]$IgnoreTlsError,
 
     [ValidateRange(1, 600000)]
     [int]$ReceiveTimeoutMs = 10000
@@ -207,6 +213,11 @@ function Test-ServerCertificate {
     Write-Warning "Certificate validation error: $($sslPolicyErrors)"
     foreach ($status in $chain.ChainStatus) {
         Write-Warning "  Chain status: $($status.StatusInformation.Trim())"
+    }
+
+    if ($IgnoreTlsError) {
+        Write-Warning 'Ignoring TLS certificate validation errors because -IgnoreTlsError was set.'
+        return $true
     }
 
     return $false
@@ -340,7 +351,7 @@ try {
     } while ($bytesRead -gt 0 -and -not $foundEndByte)
 
     if ($responseBytes.Count -eq 0) {
-        Write-Warning 'No response received from server.'
+        Write-Error 'No response received from server. Verify host/port and protocol (for example, a TLS endpoint requires -Protocol Tls or -Protocol TlsWithCertificate).'
         return
     }
 
