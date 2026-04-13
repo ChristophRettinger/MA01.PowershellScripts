@@ -59,7 +59,7 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$Path,
 
-    [ValidateNotNullOrEmpty()]
+    [ValidateSet('ISO-8859-1', 'UTF-8')]
     [string]$Encoding = 'ISO-8859-1',
 
     [ValidateSet('Tcp', 'Tls', 'TlsWithCertificate')]
@@ -309,6 +309,7 @@ try {
     }
     else {
         Write-Host 'Server response:'
+        Write-Host
         Write-Hl7Colorized -Message $responseMessage
     }
 }
