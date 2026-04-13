@@ -366,6 +366,11 @@ try {
         Set-Content -Path $ResponsePath -Value $responseMessage -Encoding UTF8
         Write-Host "Response saved to UTF-8 file: $($ResponsePath)"
     }
+    elseif ($responseMessage.Length -lt 10) {
+        Write-Warning 'No Server response'
+        Write-Host "Response:"
+        Write-Host ($responseMessage | Format-Hex)
+    }
     else {
         Write-Host 'Server response:'
         Write-Host
