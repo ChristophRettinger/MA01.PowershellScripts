@@ -43,7 +43,7 @@ The different CASENO values (`BK._CASENO`, `BK._CASENO_BC`, and `BK._CASENO_ISH`
 ## Date-range parameters in SUBFL scripts
 - SUBFL scripts in this repository that expose `StartDate`/`EndDate` also accept `Timespan` as an alternative to `EndDate`.
 - `Timespan` supports either a numeric minute value or a PowerShell `TimeSpan` input.
-- If neither `EndDate` nor `Timespan` is provided, the scripts apply a default range of 15 minutes from `StartDate`.
+- `Get-PatientInfo` defaults to the last 14 days ending at the current time when `StartDate`, `EndDate`, and `Timespan` are omitted.
 
 ## SQL export field set
 

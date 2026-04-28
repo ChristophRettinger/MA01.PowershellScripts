@@ -40,4 +40,4 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 
 ## Shared date-range behavior
 
-Scripts that expose `StartDate`/`EndDate` now also support `Timespan` as an alternative to `EndDate`. `Timespan` accepts either a number (minutes) or a PowerShell `TimeSpan` value. When `EndDate` and `Timespan` are both omitted, a default window of 15 minutes is used from `StartDate`.
+Scripts that expose `StartDate`/`EndDate` can support `Timespan` as an alternative to `EndDate`. `Timespan` accepts either a number (minutes) or a PowerShell `TimeSpan` value. `Get-PatientInfo` defaults to the last 14 days ending at the current time when `StartDate`, `EndDate`, and `Timespan` are all omitted.
