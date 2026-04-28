@@ -201,7 +201,7 @@ When the current commit is not directly tagged, the status column shows the most
 ## Script parameter conventions
 - Repository scripts that expose both `StartDate` and `EndDate` can also accept `Timespan` as an alternative end-bound.
 - `Timespan` accepts numeric minute values and PowerShell `TimeSpan` values.
-- If neither `EndDate` nor `Timespan` is supplied, a default 15-minute window is used from `StartDate`.
+- `Get-PatientInfo` defaults to the last 14 days ending at the current time when `StartDate`, `EndDate`, and `Timespan` are omitted.
 
 ## Orchestra log analysis notes
 

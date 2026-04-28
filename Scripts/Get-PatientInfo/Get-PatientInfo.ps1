@@ -25,8 +25,8 @@
 
 .PARAMETER StartDate
     Optional inclusive start date for the time range filter applied to the specified
-    `ElasticTimeField`. If omitted and EndDate is also omitted, the script derives
-    StartDate from Timespan (or 15 minutes by default) as EndDate minus Timespan.
+    `ElasticTimeField`. If omitted and EndDate is also omitted, the script defaults
+    to the last 14 days ending at the current time.
 
 .PARAMETER EndDate
     Optional inclusive end date for the time range filter applied to the specified
@@ -172,7 +172,7 @@ if ($includeEndDate -and $PSBoundParameters.ContainsKey('Timespan')) {
     throw 'Specify either EndDate or Timespan, not both.'
 }
 
-if (-not $includeEndDate) {
+if ($PSBoundParameters.ContainsKey('Timespan')) {
     $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
     if ($StartDate) {
         $EndDate = $StartDate.Add($effectiveTimespan)
@@ -180,7 +180,14 @@ if (-not $includeEndDate) {
         $EndDate = Get-Date
         $StartDate = $EndDate.Subtract($effectiveTimespan)
     }
-    $includeEndDate = $true
+} else {
+    if (-not $EndDate) {
+        $EndDate = Get-Date
+    }
+
+    if (-not $StartDate) {
+        $StartDate = $EndDate.AddDays(-14)
+    }
 }
 
 if (-not $PIDISH -and -not $CASENO) {
