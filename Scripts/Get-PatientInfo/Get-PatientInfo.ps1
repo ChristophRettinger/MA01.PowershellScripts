@@ -275,7 +275,7 @@ function New-ClipboardHtmlDocument {
     $htmlContent = @"
 <html>
 <body>
-<pre style="font-family: Consolas, 'Courier New', monospace; font-size: 10pt; margin: 0;">$InnerHtml</pre>
+<pre style="font-family: Consolas, 'Courier New', monospace; font-size: 10pt; margin: 0; background: black;">$InnerHtml</pre>
 </body>
 </html>
 "@
