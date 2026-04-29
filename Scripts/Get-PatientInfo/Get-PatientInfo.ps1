@@ -79,6 +79,11 @@
     When set (default), include `BK._ELGA_RELEVANT` in the grouping and display it as
     "Elga". Use `-IncludeElgaRelevant:$false` to omit this field.
 
+.PARAMETER ToClipboard
+    When set, writes the report to the clipboard instead of the command line. The
+    clipboard receives both plain text and HTML (fixed-width font with category colors)
+    so the content can be pasted into email clients with formatting.
+
 .EXAMPLE
     ./Get-PatientInfo.ps1 -PIDISH 0000869517 -StartDate '2025-05-01' -EndDate '2025-05-07'
 
@@ -127,7 +132,10 @@ param(
     [switch]$ShowAllCategories,
 
     [Parameter(Mandatory=$false)]
-    [switch]$IncludeElgaRelevant = $true
+    [switch]$IncludeElgaRelevant = $true,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$ToClipboard
 )
 
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
@@ -230,6 +238,110 @@ function Get-CategoryColor {
         'SPLIT' { return 'Blue' }
         default { return 'Cyan' }
     }
+}
+
+function Convert-ConsoleColorToHtml {
+    param(
+        [string]$ColorName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ColorName)) { return '#FFFFFF' }
+    switch ($ColorName.ToLowerInvariant()) {
+        'black' { return '#000000' }
+        'darkblue' { return '#00008B' }
+        'darkgreen' { return '#006400' }
+        'darkcyan' { return '#008B8B' }
+        'darkred' { return '#8B0000' }
+        'darkmagenta' { return '#8B008B' }
+        'darkyellow' { return '#9A7D0A' }
+        'gray' { return '#808080' }
+        'darkgray' { return '#A9A9A9' }
+        'blue' { return '#1E90FF' }
+        'green' { return '#00A000' }
+        'cyan' { return '#00CED1' }
+        'red' { return '#FF3030' }
+        'magenta' { return '#DA70D6' }
+        'yellow' { return '#FFD700' }
+        'white' { return '#FFFFFF' }
+        default { return '#FFFFFF' }
+    }
+}
+
+function New-ClipboardHtmlDocument {
+    param(
+        [string]$InnerHtml
+    )
+
+    $htmlContent = @"
+<html>
+<body>
+<pre style="font-family: Consolas, 'Courier New', monospace; font-size: 10pt; margin: 0;">$InnerHtml</pre>
+</body>
+</html>
+"@
+
+    $fragmentStartTag = '<!--StartFragment-->'
+    $fragmentEndTag = '<!--EndFragment-->'
+    $fullHtml = "$fragmentStartTag$htmlContent$fragmentEndTag"
+    $headerTemplate = "Version:0.9`r`nStartHTML:{0:D10}`r`nEndHTML:{1:D10}`r`nStartFragment:{2:D10}`r`nEndFragment:{3:D10}`r`n"
+    $dummyHeader = [string]::Format($headerTemplate, 0, 0, 0, 0)
+    $startHtml = $dummyHeader.Length
+    $startFragment = $startHtml
+    $endFragment = $startFragment + $fullHtml.Length
+    $endHtml = $endFragment
+    $header = [string]::Format($headerTemplate, $startHtml, $endHtml, $startFragment, $endFragment)
+
+    return "$header$fullHtml"
+}
+
+$script:reportPlainBuilder = [System.Text.StringBuilder]::new()
+$script:reportHtmlBuilder = [System.Text.StringBuilder]::new()
+
+function Write-PatientOutput {
+    param(
+        [string]$Text = '',
+        [string]$ForegroundColor = 'White',
+        [switch]$NoNewline
+    )
+
+    if (-not $ToClipboard) {
+        if ($NoNewline) {
+            Write-Host $Text -ForegroundColor $ForegroundColor -NoNewline
+        } else {
+            Write-Host $Text -ForegroundColor $ForegroundColor
+        }
+        return
+    }
+
+    $htmlColor = Convert-ConsoleColorToHtml -ColorName $ForegroundColor
+    $encodedText = [System.Net.WebUtility]::HtmlEncode($Text)
+    $null = $script:reportPlainBuilder.Append($Text)
+    $null = $script:reportHtmlBuilder.Append("<span style=""color: $($htmlColor);"">$encodedText</span>")
+
+    if (-not $NoNewline) {
+        $null = $script:reportPlainBuilder.AppendLine()
+        $null = $script:reportHtmlBuilder.AppendLine()
+    }
+}
+
+function Publish-PatientClipboard {
+    $plainText = $script:reportPlainBuilder.ToString().TrimEnd("`r", "`n")
+    $htmlFragment = New-ClipboardHtmlDocument -InnerHtml ($script:reportHtmlBuilder.ToString())
+
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        $dataObject = [System.Windows.Forms.DataObject]::new()
+        $dataObject.SetData([System.Windows.Forms.TextDataFormat]::Text, $plainText)
+        $dataObject.SetData([System.Windows.Forms.TextDataFormat]::UnicodeText, $plainText)
+        $dataObject.SetData([System.Windows.Forms.TextDataFormat]::Html, $htmlFragment)
+        [System.Windows.Forms.Clipboard]::SetDataObject($dataObject, $true)
+    } catch {
+        Set-Clipboard -Value $plainText
+        Write-Warning "Could not set HTML clipboard format. Plain text clipboard was set. Error: $_"
+        return
+    }
+
+    Write-Host 'Report copied to clipboard (plain text + HTML).' -ForegroundColor Green
 }
 
 function Convert-ToTimestamp {
@@ -489,7 +601,10 @@ while ($queuedPids.Count -gt 0) {
 }
 
 if ($collectedHits.Count -eq 0) {
-    Write-Host 'No matching documents found for the supplied parameters.'
+    Write-PatientOutput 'No matching documents found for the supplied parameters.'
+    if ($ToClipboard) {
+        Publish-PatientClipboard
+    }
     return
 }
 
@@ -500,7 +615,7 @@ try {
     $exportName = "PatientInfo_{0:yyyyMMdd_HHmmss}.json" -f (Get-Date)
     $exportPath = Join-Path -Path $OutputDirectory -ChildPath $exportName
     $collectedHits.Values | ConvertTo-Json -Depth 15 | Set-Content -Path $exportPath
-    Write-Host "Exported raw hits to $exportPath"
+    Write-PatientOutput "Exported raw hits to $exportPath"
 } catch {
     Write-Warning "Failed to write export to $($OutputDirectory): $_"
 }
@@ -523,7 +638,7 @@ if (-not $ShowAllCategories) {
 }
 
 if ($pidValues.Count -gt 0) {
-    Write-Host "PID(s): $($pidValues -join ', ')" -ForegroundColor Cyan
+    Write-PatientOutput "PID(s): $($pidValues -join ', ')" -ForegroundColor Cyan
 }
 
 $headerMap = @{}
@@ -557,7 +672,12 @@ if ($headerMap.Values.Count -gt 0) {
         }
     }
 
-    $headerRows | Where-Object { $_.CASENO_ISH -ne "-" -or $_.AID -ne "-" } | Sort-Object CASENO_ISH, MOVENO | Format-Table -AutoSize
+    $headerText = $headerRows |
+        Where-Object { $_.CASENO_ISH -ne "-" -or $_.AID -ne "-" } |
+        Sort-Object CASENO_ISH, MOVENO |
+        Format-Table -AutoSize |
+        Out-String
+    Write-PatientOutput $headerText
 }
 
 $categoryList = [System.Collections.Generic.List[string]]::new()
@@ -572,16 +692,16 @@ foreach ($hit in $orderedHits) {
 }
 
 if ($categoryList.Count -gt 0) {
-    Write-Host "Occurring Categories: " -NoNewline
+    Write-PatientOutput "Occurring Categories: " -NoNewline
     for ($idx = 0; $idx -lt $categoryList.Count; $idx++) {
         $categoryName = $categoryList[$idx]
         $color = Get-CategoryColor -Category $categoryName
-        Write-Host $categoryName -ForegroundColor $color -NoNewline
+        Write-PatientOutput $categoryName -ForegroundColor $color -NoNewline
         if ($idx -lt ($categoryList.Count - 1)) {
-            Write-Host " " -NoNewline
+            Write-PatientOutput " " -NoNewline
         }
     }
-    Write-Host ""
+    Write-PatientOutput ""
 }
 
 $segments = @{}
@@ -611,7 +731,7 @@ for ($i=1; $i -le $counter; $i++) {
     $segmentKey = $segments[$i].WorkflowPattern
 
     if (-not $segmentHits -or $segmentHits.Count -eq 0) {
-        Write-Host "No $segmentKey records." -ForegroundColor DarkGray
+        Write-PatientOutput "No $segmentKey records." -ForegroundColor DarkGray
         continue
     }
 
@@ -661,21 +781,21 @@ for ($i=1; $i -le $counter; $i++) {
         $caseTypeSuffix = if ($caseType) { " $($caseType)" } else { '' }
         $moveText = if ($moveNo -and $moveNo -ne '-') { " $($moveNo)" } else { '' }
         $pidOldText = if ($pidIshOld) { " $($pidIshOld)" } else { '' }
-        Write-Host "`nCase $($caseIsh)$($caseTypeSuffix)$($moveText) | PID $($pidIsh)$($pidOldText)$($elgaText) | $($category) / $($subcategory)$($changeText)" -ForegroundColor $color -NoNewline
+        Write-PatientOutput "`nCase $($caseIsh)$($caseTypeSuffix)$($moveText) | PID $($pidIsh)$($pidOldText)$($elgaText) | $($category) / $($subcategory)$($changeText)" -ForegroundColor $color -NoNewline
         if ($pattern -eq "ERROR") {
-            Write-host "  $($pattern)" -ForegroundColor Red
+            Write-PatientOutput "  $($pattern)" -ForegroundColor Red
         }
         else {
-            Write-Host ""
+            Write-PatientOutput ""
         }
 
         $inputs = @($group.Group | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_stage') -eq 'Input' })
         if ($inputs -and $inputs.Count -gt 0) {
             $firstInput = Convert-ToTimestamp -Source $inputs[0]._source -TimeField $ElasticTimeField
             $lastInput = Convert-ToTimestamp -Source $inputs[-1]._source -TimeField $ElasticTimeField
-            Write-Host "  Input: $($inputs.Count) item(s), $($firstInput.ToString('yyyy-MM-dd HH:mm:ss')) - $($lastInput.ToString('yyyy-MM-dd HH:mm:ss'))"
+            Write-PatientOutput "  Input: $($inputs.Count) item(s), $($firstInput.ToString('yyyy-MM-dd HH:mm:ss')) - $($lastInput.ToString('yyyy-MM-dd HH:mm:ss'))"
         } else {
-            Write-Host '  Input: none'
+            Write-PatientOutput '  Input: none'
         }
 
         $outputs = @($group.Group | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_stage') -eq 'Output' })
@@ -685,11 +805,14 @@ for ($i=1; $i -le $counter; $i++) {
                 $partyName = if ($party.Name) { $party.Name } else { '-' }
                 $firstOut = Convert-ToTimestamp -Source $party.Group[0]._source -TimeField $ElasticTimeField
                 $lastOut = Convert-ToTimestamp -Source $party.Group[-1]._source -TimeField $ElasticTimeField
-                Write-Host "  Output -> $($partyName): $($party.Count) item(s), $($firstOut.ToString('yyyy-MM-dd HH:mm:ss')) - $($lastOut.ToString('yyyy-MM-dd HH:mm:ss'))"
+                Write-PatientOutput "  Output -> $($partyName): $($party.Count) item(s), $($firstOut.ToString('yyyy-MM-dd HH:mm:ss')) - $($lastOut.ToString('yyyy-MM-dd HH:mm:ss'))"
             }
         } else {
-            Write-Host '  Output: none'
+            Write-PatientOutput '  Output: none'
         }
     }
 }
-Write-host ""
+Write-PatientOutput ""
+if ($ToClipboard) {
+    Publish-PatientClipboard
+}

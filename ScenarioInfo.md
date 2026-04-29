@@ -202,6 +202,7 @@ When the current commit is not directly tagged, the status column shows the most
 - Repository scripts that expose both `StartDate` and `EndDate` can also accept `Timespan` as an alternative end-bound.
 - `Timespan` accepts numeric minute values and PowerShell `TimeSpan` values.
 - `Get-PatientInfo` defaults to the last 14 days ending at the current time when `StartDate`, `EndDate`, and `Timespan` are omitted.
+- `Get-PatientInfo` also supports `ToClipboard` to place the report into the clipboard as plain text plus HTML (fixed-width) for email-friendly pasting.
 
 ## Orchestra log analysis notes
 
