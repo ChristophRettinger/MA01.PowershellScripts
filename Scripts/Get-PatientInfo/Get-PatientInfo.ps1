@@ -331,9 +331,9 @@ function Publish-PatientClipboard {
     try {
         Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
         $dataObject = [System.Windows.Forms.DataObject]::new()
-        $dataObject.SetData([System.Windows.Forms.TextDataFormat]::Text, $plainText)
-        $dataObject.SetData([System.Windows.Forms.TextDataFormat]::UnicodeText, $plainText)
-        $dataObject.SetData([System.Windows.Forms.TextDataFormat]::Html, $htmlFragment)
+        $dataObject.SetData([System.Windows.Forms.DataFormats]::Text, $plainText)
+        $dataObject.SetData([System.Windows.Forms.DataFormats]::UnicodeText, $plainText)
+        $dataObject.SetData([System.Windows.Forms.DataFormats]::Html, $htmlFragment)
         [System.Windows.Forms.Clipboard]::SetDataObject($dataObject, $true)
     } catch {
         Set-Clipboard -Value $plainText
