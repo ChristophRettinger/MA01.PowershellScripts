@@ -92,6 +92,119 @@ param(
     [switch]$ResetCredentials
 )
 
+
+function Write-ColorizedXml {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [xml]$XmlDocument
+    )
+
+    $indentUnit = '  '
+
+    function Write-Indent {
+        param([int]$Level)
+        if ($Level -gt 0) {
+            Write-Host ($indentUnit * $Level) -NoNewline
+        }
+    }
+
+    function Write-XmlNode {
+        param(
+            [System.Xml.XmlNode]$Node,
+            [int]$Level
+        )
+
+        switch ($Node.NodeType) {
+            ([System.Xml.XmlNodeType]::Element) {
+                Write-Indent -Level $Level
+                Write-Host '<' -NoNewline -ForegroundColor DarkGray
+
+                if ($Node.Prefix) {
+                    Write-Host ($Node.Prefix + ':') -NoNewline -ForegroundColor Magenta
+                }
+
+                Write-Host $Node.LocalName -NoNewline -ForegroundColor Cyan
+
+                if ($Node.Attributes) {
+                    foreach ($attribute in $Node.Attributes) {
+                        Write-Host ' ' -NoNewline
+                        if ($attribute.Prefix) {
+                            Write-Host ($attribute.Prefix + ':') -NoNewline -ForegroundColor DarkMagenta
+                        }
+                        Write-Host $attribute.LocalName -NoNewline -ForegroundColor Yellow
+                        Write-Host '=' -NoNewline -ForegroundColor DarkGray
+                        Write-Host '"' -NoNewline -ForegroundColor DarkGray
+                        Write-Host $attribute.Value -NoNewline -ForegroundColor Green
+                        Write-Host '"' -NoNewline -ForegroundColor DarkGray
+                    }
+                }
+
+                if (-not $Node.HasChildNodes) {
+                    Write-Host '/>' -ForegroundColor DarkGray
+                    break
+                }
+
+                $childNodes = @($Node.ChildNodes)
+                $hasElementChildren = $false
+                foreach ($childNode in $childNodes) {
+                    if ($childNode.NodeType -eq [System.Xml.XmlNodeType]::Element) {
+                        $hasElementChildren = $true
+                        break
+                    }
+                }
+
+                if ($hasElementChildren) {
+                    Write-Host '>' -ForegroundColor DarkGray
+                    foreach ($childNode in $childNodes) {
+                        Write-XmlNode -Node $childNode -Level ($Level + 1)
+                    }
+                    Write-Indent -Level $Level
+                    Write-Host '</' -NoNewline -ForegroundColor DarkGray
+                    if ($Node.Prefix) {
+                        Write-Host ($Node.Prefix + ':') -NoNewline -ForegroundColor Magenta
+                    }
+                    Write-Host $Node.LocalName -NoNewline -ForegroundColor Cyan
+                    Write-Host '>' -ForegroundColor DarkGray
+                }
+                else {
+                    Write-Host '>' -NoNewline -ForegroundColor DarkGray
+                    foreach ($childNode in $childNodes) {
+                        Write-XmlNode -Node $childNode -Level 0
+                    }
+                    Write-Host '</' -NoNewline -ForegroundColor DarkGray
+                    if ($Node.Prefix) {
+                        Write-Host ($Node.Prefix + ':') -NoNewline -ForegroundColor Magenta
+                    }
+                    Write-Host $Node.LocalName -NoNewline -ForegroundColor Cyan
+                    Write-Host '>' -ForegroundColor DarkGray
+                }
+            }
+            ([System.Xml.XmlNodeType]::Text) {
+                Write-Host $Node.Value -NoNewline -ForegroundColor White
+            }
+            ([System.Xml.XmlNodeType]::CData) {
+                Write-Host '<![CDATA[' -NoNewline -ForegroundColor DarkGray
+                Write-Host $Node.Value -NoNewline -ForegroundColor White
+                Write-Host ']]>' -NoNewline -ForegroundColor DarkGray
+            }
+            ([System.Xml.XmlNodeType]::Comment) {
+                Write-Indent -Level $Level
+                Write-Host '<!--' -NoNewline -ForegroundColor DarkGray
+                Write-Host $Node.Value -NoNewline -ForegroundColor DarkGreen
+                Write-Host '-->' -ForegroundColor DarkGray
+            }
+        }
+    }
+
+    Write-Host '<?xml version="1.0"?>' -ForegroundColor DarkGray
+    foreach ($node in $XmlDocument.ChildNodes) {
+        if ($node.NodeType -ne [System.Xml.XmlNodeType]::XmlDeclaration) {
+            Write-XmlNode -Node $node -Level 0
+        }
+    }
+}
+
 function Resolve-PatAuskunftUrl {
     param([string]$TargetEnvironment)
 
@@ -186,4 +299,4 @@ $writer.Dispose()
 Write-Host ("Environment: $($Environment)") -ForegroundColor Cyan
 Write-Host ("ServiceUrl: $($serviceUrl)") -ForegroundColor DarkCyan
 Write-Host ''
-Write-Host $stringBuilder.ToString() -ForegroundColor Green
+Write-ColorizedXml -XmlDocument $innerXml
