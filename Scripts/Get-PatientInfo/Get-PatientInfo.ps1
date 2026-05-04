@@ -64,7 +64,7 @@
     for the patient are retrieved.
 
 .PARAMETER CASENO
-    Case identifier. The script infers whether it is `BK._CASENO_ISH` (10 digits),
+    Case identifier (alias: AID). The script infers whether it is `BK._CASENO_ISH` (10 digits),
     `BK._CASENO_BC` (9 alphanumeric characters), or `BK._CASENO`
     (two 8-digit numbers separated by whitespace) and uses the matching field for
     searching.
@@ -131,6 +131,7 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$PIDISH,
 
+    [Alias('AID')]
     [Parameter(Mandatory=$false)]
     [string]$CASENO,
 
