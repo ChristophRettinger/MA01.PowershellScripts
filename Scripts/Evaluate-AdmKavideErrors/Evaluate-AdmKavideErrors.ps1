@@ -40,8 +40,8 @@
     minutes. Cannot be used together with EndDate.
 
 .PARAMETER Environment
-    Environment value to match (production, staging, testing). Defaults to
-    production.
+    Environment value to match (production, staging, testing, development). 
+	Defaults to production.
 
 .PARAMETER Instance
     Specific server instance name to filter (optional).
@@ -79,7 +79,7 @@ param(
     [object]$Timespan,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet('production','staging','testing')]
+    [ValidateSet('production','staging','testing','development')]
     [string]$Environment = 'production',
 
     [Parameter(Mandatory=$false)]

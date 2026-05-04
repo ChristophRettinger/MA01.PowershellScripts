@@ -55,6 +55,10 @@
     Directory where a JSON export of the collected hits is written. Defaults to an
     `Output` folder beside this script.
 
+.PARAMETER Environment
+    Environment value to match (production, staging, testing, development). 
+	Defaults to production.
+
 .PARAMETER PIDISH
     Patient identifier (BK._PID_ISH). When provided, all related cases and transfers
     for the patient are retrieved.
@@ -119,6 +123,10 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output'),
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('production','staging','testing','development')]
+    [string]$Environment = 'production',
 
     [Parameter(Mandatory=$false)]
     [string]$PIDISH,
@@ -466,7 +474,7 @@ if ($PSBoundParameters.ContainsKey('ElasticApiKey') -and $ElasticApiKey) {
 
 $baseMust = @(
     @{ term = @{ 'BK.SUBFL_messagetype' = 'HCM' } },
-    @{ term = @{ 'Environment' = 'production' } },
+    @{ term = @{ 'Environment' = $Environment } },
     @{ bool = @{ should = @(
         @{ term = @{ 'BK.SUBFL_stage' = 'Input' } },
         @{ bool = @{ must = @(
@@ -820,7 +828,8 @@ for ($i=1; $i -le $counter; $i++) {
 
         if ($IncludeMSGID) {
             $msgIdEntries = @()
-            foreach ($entry in $group.Group) {
+            $inputs = @($group.Group | Where-Object { (Get-ElasticSourceValue -Source $_._source -FieldPath 'BK.SUBFL_stage') -eq 'Input' })
+            foreach ($entry in $inputs) {
                 $entryMsgId = Get-ElasticSourceValue -Source $entry._source -FieldPath 'BusinessCaseId'
                 if ([string]::IsNullOrWhiteSpace($entryMsgId)) { continue }
 
