@@ -223,3 +223,7 @@ The summary output tracks first/last occurrence, count, severity, flattened stat
 ## Cato unit extraction notes
 
 `Python-ExtractCatoUnitsForElastic` reads active Cato subscription XML payloads from `OrchEsbWskConfiguration`, extracts `Condition` entries where `locator="LST_KST"`, and writes NDJSON output with one row per `oe` plus derived `einrichtung` for Elasticsearch ingestion with `typ` fixed to `ADT`. The script targets Python 3.9.25 (or newer), fails with clear guidance when `pyodbc` or unixODBC runtime libraries are unavailable, and validates SQL Server ODBC drivers before connecting (prefers Driver 18, falls back to Driver 17).
+
+## PatAuskunft helper script note
+
+`Call-PatAuskunft` sends SOAP `GetData` requests to PatAuskunft and decodes the embedded XML response payload for console inspection. It supports environment-based endpoint selection and stores credentials in a user-scoped CLIXML file beside the script.
