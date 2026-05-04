@@ -92,6 +92,8 @@ param(
     [switch]$ResetCredentials
 )
 
+$ErrorActionPreference = 'Stop'
+
 
 function Write-ColorizedXml {
     [CmdletBinding()]
@@ -270,7 +272,12 @@ $soapEnvelope = @"
 </soap:Envelope>
 "@
 
-$response = Invoke-WebRequest -Uri $serviceUrl -Method Post -Credential $credential -ContentType 'text/xml; charset=utf-8' -Body $soapEnvelope
+try {
+    $response = Invoke-WebRequest -Uri $serviceUrl -Method Post -Credential $credential -ContentType 'text/xml; charset=utf-8' -Body $soapEnvelope -ErrorAction Stop
+}
+catch {
+    throw "PatAuskunft request failed for environment '$($Environment)': $($_.Exception.Message)"
+}
 
 [xml]$responseXml = $response.Content
 $ns = New-Object System.Xml.XmlNamespaceManager($responseXml.NameTable)
