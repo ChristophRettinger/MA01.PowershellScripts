@@ -92,8 +92,6 @@ param(
     [switch]$ResetCredentials
 )
 
-$ErrorActionPreference = 'Stop'
-
 
 function Write-ColorizedXml {
     [CmdletBinding()]
@@ -236,7 +234,7 @@ function Resolve-DefaultResultFilter {
 }
 
 $serviceUrl = Resolve-PatAuskunftUrl -TargetEnvironment $Environment
-$credentialsPath = Join-Path -Path $PSScriptRoot -ChildPath '$($Environment).credentials.clixml'
+$credentialsPath = Join-Path -Path $PSScriptRoot -ChildPath "$($Environment).credentials.clixml"
 
 $credential = $null
 if (-not $ResetCredentials -and (Test-Path -Path $credentialsPath)) {
@@ -272,12 +270,7 @@ $soapEnvelope = @"
 </soap:Envelope>
 "@
 
-try {
-    $response = Invoke-WebRequest -Uri $serviceUrl -Method Post -Credential $credential -ContentType 'text/xml; charset=utf-8' -Body $soapEnvelope -ErrorAction Stop
-}
-catch {
-    throw "PatAuskunft request failed for environment '$($Environment)': $($_.Exception.Message)"
-}
+$response = Invoke-WebRequest -Uri $serviceUrl -Method Post -Credential $credential -ContentType 'text/xml; charset=utf-8' -Body $soapEnvelope
 
 [xml]$responseXml = $response.Content
 $ns = New-Object System.Xml.XmlNamespaceManager($responseXml.NameTable)
