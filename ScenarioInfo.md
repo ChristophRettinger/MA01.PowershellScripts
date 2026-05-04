@@ -203,6 +203,7 @@ When the current commit is not directly tagged, the status column shows the most
 - `Timespan` accepts numeric minute values and PowerShell `TimeSpan` values.
 - `Get-PatientInfo` defaults to the last 14 days ending at the current time when `StartDate`, `EndDate`, and `Timespan` are omitted.
 - `Get-PatientInfo` also supports `ToClipboard` to place the report into the clipboard as plain text plus HTML (fixed-width) for email-friendly pasting.
+- `Get-PatientInfo` supports `IncludeMSGID` to list MSGID values with their message dates per grouped output block.
 
 ## Orchestra log analysis notes
 
