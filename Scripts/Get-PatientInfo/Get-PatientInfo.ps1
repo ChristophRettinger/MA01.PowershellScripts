@@ -79,6 +79,10 @@
     When set (default), include `BK._ELGA_RELEVANT` in the grouping and display it as
     "Elga". Use `-IncludeElgaRelevant:$false` to omit this field.
 
+.PARAMETER IncludeMSGID
+    When set, list MSGID values with their corresponding message date directly after the
+    Input/Output section of each grouped block.
+
 .PARAMETER ToClipboard
     When set, writes the report to the clipboard instead of the command line. The
     clipboard receives both plain text and HTML (fixed-width font with category colors)
@@ -133,6 +137,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$IncludeElgaRelevant = $true,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$IncludeMSGID,
 
     [Parameter(Mandatory=$false)]
     [switch]$ToClipboard
@@ -809,6 +816,36 @@ for ($i=1; $i -le $counter; $i++) {
             }
         } else {
             Write-PatientOutput '  Output: none'
+        }
+
+        if ($IncludeMSGID) {
+            $msgIdEntries = @()
+            foreach ($entry in $group.Group) {
+                $entryMsgId = Get-ElasticSourceValue -Source $entry._source -FieldPath 'BusinessCaseId'
+                if ([string]::IsNullOrWhiteSpace($entryMsgId)) { continue }
+
+                $entryTimestamp = Convert-ToTimestamp -Source $entry._source -TimeField $ElasticTimeField
+                $entryDateText = if ($entryTimestamp -eq [datetime]::MinValue) { '-' } else { $entryTimestamp.ToString('yyyy-MM-dd HH:mm:ss') }
+                $msgIdEntries += [pscustomobject]@{
+                    MSGID = $entryMsgId
+                    DateText = $entryDateText
+                    SortDate = $entryTimestamp
+                }
+            }
+
+            if ($msgIdEntries.Count -gt 0) {
+                $uniqueMsgIds = $msgIdEntries |
+                    Sort-Object -Property SortDate, MSGID |
+                    Group-Object -Property MSGID, DateText |
+                    ForEach-Object { $_.Group[0] }
+
+                Write-PatientOutput '  MSGIDs:'
+                foreach ($msgIdEntry in $uniqueMsgIds) {
+                    Write-PatientOutput "    $($msgIdEntry.MSGID) | $($msgIdEntry.DateText)"
+                }
+            } else {
+                Write-PatientOutput '  MSGIDs: none'
+            }
         }
     }
 }
