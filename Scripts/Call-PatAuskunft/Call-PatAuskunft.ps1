@@ -210,9 +210,9 @@ function Resolve-PatAuskunftUrl {
 
     $urlsByEnvironment = @{
         production  = 'https://dg-patauskunft.wienkav.at/service/'
-        staging     = 'https://dg-patauskunft-staging.wienkav.at/service/'
-        testing     = 'https://dg-patauskunft-test.wienkav.at/service/'
-        development = 'https://dg-patauskunft-dev.wienkav.at/service/'
+        staging     = 'https://abndg-patauskunft.wienkav.at/service/'
+        testing     = 'https://epadg-patauskunft.wienkav.at/service/'
+        development = 'https://epadg-patauskunft.wienkav.at/service/'
     }
 
     if (-not $urlsByEnvironment.ContainsKey($TargetEnvironment)) {
@@ -234,7 +234,7 @@ function Resolve-DefaultResultFilter {
 }
 
 $serviceUrl = Resolve-PatAuskunftUrl -TargetEnvironment $Environment
-$credentialsPath = Join-Path -Path $PSScriptRoot -ChildPath 'Call-PatAuskunft.credentials.clixml'
+$credentialsPath = Join-Path -Path $PSScriptRoot -ChildPath '$($Environment).credentials.clixml'
 
 $credential = $null
 if (-not $ResetCredentials -and (Test-Path -Path $credentialsPath)) {
