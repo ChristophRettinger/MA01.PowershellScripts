@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<admMethodInfo xmlns="http://www.wienkav.at/kav/igv/XMLSchema">
+	<Result>
+		<Name>PATIENT_1</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>Personenkennzeichen</Description>
+		</Version>
+		<Version>
+			<Number>3</Number>
+			<Description>+ IS-H Fallzahl
++ IS-H PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>7</Number>
+			<Description>+ AKH SAP PatientenID</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>PATIENT_2</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>PATIENT_1 +
+PatientDetails
+AufenthaltsDetails
+Wohnadresse</Description>
+		</Version>
+		<Version>
+			<Number>2</Number>
+			<Description>+ Personennummer
++ AufnahmeZeit
++ Entlassungszeit
++ EntlassungWohin</Description>
+		</Version>
+		<Version>
+			<Number>3</Number>
+			<Description>+ IS-H Fallzahl
++ IS-H PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>4</Number>
+			<Description>+ Email des Patienten</Description>
+		</Version>
+		<Version>
+			<Number>5</Number>
+			<Description>AktuelleKostenstelle (PflegeBeh und Fach) anstelle von Standort</Description>
+		</Version>
+		<Version>
+			<Number>7</Number>
+			<Description>+ AKH SAP PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>8</Number>
+			<Description>Beginn-,Ende-,Aufnahme- und EntlassungsZeitpunkt anstelle von getrenntem Datum und Zeit</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>PATIENT_2L</Name>
+		<Version>
+			<Number>2</Number>
+			<Description>PATIENT_2 (Version 2) +
+LetzteVerlegung</Description>
+		</Version>
+		<Version>
+			<Number>3</Number>
+			<Description>+ IS-H Fallzahl
++ IS-H PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>4</Number>
+			<Description>+ Email des Patienten</Description>
+		</Version>
+		<Version>
+			<Number>5</Number>
+			<Description>AktuelleKostenstelle (PflegeBeh und Fach) anstelle von Standort</Description>
+		</Version>
+		<Version>
+			<Number>6</Number>
+			<Description>LetzteBewegungStat/LetzteBewegungAmb anstelle von LetzteVerlegung</Description>
+		</Version>
+		<Version>
+			<Number>7</Number>
+			<Description>+ AKH SAP PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>8</Number>
+			<Description>Beginn-,Ende-,Aufnahme- und EntlassungsZeitpunkt anstelle von getrenntem Datum und Zeit</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>PATIENT_2N</Name>
+		<Version>
+			<Number>2</Number>
+			<Description>PATIENT_2L +
+Aufenthaltsliste</Description>
+		</Version>
+		<Version>
+			<Number>3</Number>
+			<Description>+ IS-H Fallzahl
++ IS-H PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>4</Number>
+			<Description>+ Email des Patienten</Description>
+		</Version>
+		<Version>
+			<Number>5</Number>
+			<Description>AktuelleKostenstelle (PflegeBeh und Fach) anstelle von Standort</Description>
+		</Version>
+		<Version>
+			<Number>6</Number>
+			<Description>LetzteBewegungStat/LetzteBewegungAmb anstelle von LetzteVerlegung</Description>
+		</Version>
+		<Version>
+			<Number>7</Number>
+			<Description>+ AKH SAP PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>8</Number>
+			<Description>Beginn-,Ende-,Aufnahme- und EntlassungsZeitpunkt anstelle von getrenntem Datum und Zeit</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>PATIENT_3</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>PATIENT_2 +
+Kostenträger
+Dienstgeber
+Angehörige
+Diagnosen
+MitversichertBei</Description>
+		</Version>
+		<Version>
+			<Number>2</Number>
+			<Description>+ Personennummer
++ AufnahmeZeit
++ Entlassungszeit
++ EntlassungWohin
++ Patientenleittaschennr</Description>
+		</Version>
+		<Version>
+			<Number>3</Number>
+			<Description>+ IS-H Fallzahl
++ IS-H PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>4</Number>
+			<Description>+ Email des Patienten</Description>
+		</Version>
+		<Version>
+			<Number>5</Number>
+			<Description>AktuelleKostenstelle (PflegeBeh und Fach) anstelle von Standort</Description>
+		</Version>
+		<Version>
+			<Number>7</Number>
+			<Description>+ AKH SAP PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>8</Number>
+			<Description>Beginn-,Ende-,Aufnahme- und EntlassungsZeitpunkt anstelle von getrenntem Datum und Zeit</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>PATIENT_3L</Name>
+		<Version>
+			<Number>2</Number>
+			<Description>PATIENT_3 (Version 2) +
+LetzteVerlegung</Description>
+		</Version>
+		<Version>
+			<Number>3</Number>
+			<Description>+ IS-H Fallzahl
++ IS-H PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>4</Number>
+			<Description>+ Email des Patienten</Description>
+		</Version>
+		<Version>
+			<Number>5</Number>
+			<Description>AktuelleKostenstelle (PflegeBeh und Fach) anstelle von Standort</Description>
+		</Version>
+		<Version>
+			<Number>6</Number>
+			<Description>LetzteBewegungStat/LetzteBewegungAmb anstelle von LetzteVerlegung</Description>
+		</Version>
+		<Version>
+			<Number>7</Number>
+			<Description>+ AKH SAP PatientenID</Description>
+		</Version>
+		<Version>
+			<Number>8</Number>
+			<Description>Beginn-,Ende-,Aufnahme- und EntlassungsZeitpunkt anstelle von getrenntem Datum und Zeit</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>AIDKETTE</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>Aufenthaltskette</Description>
+		</Version>
+		<Version>
+			<Number>3</Number>
+			<Description>+ IS-H Fallzahl
++ IS-H PatientenID</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>PATIENT</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>IS-H Patient, Versionierung wird nicht unterstüzt.</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>AUFNAHME</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>IS-H Aufnahme, Versionierung wird nicht unterstüzt.</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>BEWEGUNG</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>IS-H Bewegung, Versionierung wird nicht unterstüzt.</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>BEWEGUNGSLISTE</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>Liste der Bewegungen. Nur Bewegungen, deren AdminArt der des Aufenthalts entspricht.</Description>
+		</Version>
+		<Version>
+			<Number>2</Number>
+			<Description>+ Beginn- und Endezeit jeder Bewegung</Description>
+		</Version>
+		<Version>
+			<Number>3</Number>
+			<Description>Liste ALLER Bewegungen 
++ Bewegungskennzeichen
++ Aufenthaltsdaten</Description>
+		</Version>
+		<Version>
+			<Number>5</Number>
+			<Description>LeistendeKostenstelle getrennt in PflegeBeh und Fach</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>BEWEGUNG_1</Name>
+		<Version>
+			<Number>2</Number>
+			<Description>Daten der Bewegung</Description>
+		</Version>
+		<Version>
+			<Number>3</Number>
+			<Description>+ Bewegungskennzeichen
++ IS-H Fallzahl</Description>
+		</Version>
+		<Version>
+			<Number>5</Number>
+			<Description>LeistendeKostenstelle getrennt in PflegeBeh und Fach</Description>
+		</Version>
+		<Version>
+			<Number>8</Number>
+			<Description>Beginn-,EndeZeitpunkt anstelle von getrenntem Datum und Zeit</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>LEISTUNG</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>IS-H Leistung, Versionierung wird nicht unterstüzt.</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>EXT_LEISTUNG</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>IS-H Intercompany-Leistung, Versionierung wird nicht unterstüzt.</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>DIAGNOSE</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>IS-H Diagnose, Versionierung wird nicht unterstüzt.</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>KOSTENTRAEGER</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>IS-H Kostenträger, Versionierung wird nicht unterstüzt.</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>KOSTENUEBERNAHME</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>IS-H Kostenübernahme, Versionierung wird nicht unterstüzt.</Description>
+		</Version>
+	</Result>
+	<Result>
+		<Name>PATMERGE</Name>
+		<Version>
+			<Number>1</Number>
+			<Description>IS-H Patientenmerge, Versionierung wird nicht unterstüzt.</Description>
+		</Version>
+	</Result>
+</admMethodInfo>
