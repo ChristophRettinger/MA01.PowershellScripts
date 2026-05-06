@@ -27,7 +27,8 @@
     PatAuskunft result type.
 
 .PARAMETER ResultFilter
-    Optional explicit result filter. If omitted, defaults depend on Result.
+    Optional explicit result version/filter. If omitted, the newest available
+    version for the selected Result is used.
 
 .PARAMETER ID1
     Explicit value for ID1. Overridden by CASENO or AID.
@@ -67,7 +68,7 @@ param(
     [string]$LEISTKST,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet('PATIENT_1','PATIENT_2','PATIENT_2L','PATIENT_3','PATIENT_3L','BEWEGUNG_1','AIDKette','DIAGNOSE','EXT_DIAGNOSE','EXT_LEISTUNG')]
+    [ValidateSet('PATIENT_1','PATIENT_2','PATIENT_2L','PATIENT_2N','PATIENT_3','PATIENT_3L','AIDKETTE','PATIENT','AUFNAHME','BEWEGUNG','BEWEGUNGSLISTE','BEWEGUNG_1','LEISTUNG','EXT_LEISTUNG','DIAGNOSE','KOSTENTRAEGER','KOSTENUEBERNAHME','PATMERGE')]
     [string]$Result = 'PATIENT_3',
 
     [Parameter(Mandatory=$false)]
@@ -225,12 +226,32 @@ function Resolve-PatAuskunftUrl {
 function Resolve-DefaultResultFilter {
     param([string]$TargetResult)
 
-    switch ($TargetResult) {
-        'PATIENT_2' { return '5' }
-        'PATIENT_2L' { return '6' }
-        'PATIENT_3' { return '3' }
-        default { return '' }
+    $maxResultVersionByResult = @{
+        PATIENT_1      = '7'
+        PATIENT_2      = '8'
+        PATIENT_2L     = '8'
+        PATIENT_2N     = '8'
+        PATIENT_3      = '8'
+        PATIENT_3L     = '8'
+        AIDKETTE       = '3'
+        PATIENT        = '1'
+        AUFNAHME       = '1'
+        BEWEGUNG       = '1'
+        BEWEGUNGSLISTE = '5'
+        BEWEGUNG_1     = '8'
+        LEISTUNG       = '1'
+        EXT_LEISTUNG   = '1'
+        DIAGNOSE       = '1'
+        KOSTENTRAEGER  = '1'
+        KOSTENUEBERNAHME = '1'
+        PATMERGE       = '1'
     }
+
+    if ($maxResultVersionByResult.ContainsKey($TargetResult)) {
+        return $maxResultVersionByResult[$TargetResult]
+    }
+
+    return ''
 }
 
 $serviceUrl = Resolve-PatAuskunftUrl -TargetEnvironment $Environment

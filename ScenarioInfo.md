@@ -226,7 +226,7 @@ The summary output tracks first/last occurrence, count, severity, flattened stat
 
 ## PatAuskunft helper script note
 
-`Call-PatAuskunft` sends SOAP `GetData` requests to PatAuskunft and decodes the embedded XML response payload for console inspection. It supports environment-based endpoint selection and stores credentials in a user-scoped CLIXML file beside the script.
+`Call-PatAuskunft` sends SOAP `GetData` requests to PatAuskunft and decodes the embedded XML response payload for console inspection. It supports environment-based endpoint selection, stores credentials in a user-scoped CLIXML file beside the script, allows all currently documented result names as parameter input, and defaults `Resultfilter` to the highest available version per selected result unless explicitly provided.
 
 ## PatAuskunft helper notes
 
