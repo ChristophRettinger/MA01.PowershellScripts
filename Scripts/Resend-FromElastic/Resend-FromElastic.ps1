@@ -747,6 +747,11 @@ if ($Stage) { $effectiveFilterCount++ }
 if (-not [string]::IsNullOrWhiteSpace($WorkflowPattern)) { $effectiveFilterCount++ }
 $helpScriptPath = if ([string]::IsNullOrWhiteSpace($PSCommandPath)) { $MyInvocation.MyCommand.Path } else { $PSCommandPath }
 
+if ($PSBoundParameters.Count -eq 0) {
+    Get-Help -Path $helpScriptPath -Detailed
+    return
+}
+
 if ($effectiveFilterCount -eq 0) {
     Get-Help -Path $helpScriptPath -Detailed
     throw 'At least one filter parameter must be provided.'
