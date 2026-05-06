@@ -103,7 +103,8 @@
     When set, clears _MSGID header.
 
 .PARAMETER ProcessState
-    Fallback ProcessState for SourceInfoMsg. Defaults to 'Original'.
+    ProcessState override for SourceInfoMsg when explicitly provided.
+    If omitted, ProcessState from SourceInfo is used when available; otherwise 'Original'.
 
 .PARAMETER OutputDirectory
     Optional output directory for logs.
@@ -481,7 +482,8 @@ function Get-SourceInfoXml {
         [object]$Source,
         [string]$SubscriptionFilterParty,
         [string]$SubscriptionFilterId,
-        [string]$ResolvedProcessState,
+        [string]$FallbackProcessState,
+        [bool]$UseProvidedProcessState = $false,
         [string]$TargetName
     )
 
@@ -521,7 +523,7 @@ function Get-SourceInfoXml {
         ''
     }
 
-    $processStateValue = if ($sourceInfo -and $sourceInfo.SourceInfo.ProcessState) { "$($sourceInfo.SourceInfo.ProcessState)" } else { $ResolvedProcessState }
+    $processStateValue = if ($UseProvidedProcessState) { $FallbackProcessState } elseif ($sourceInfo -and $sourceInfo.SourceInfo.ProcessState) { "$($sourceInfo.SourceInfo.ProcessState)" } else { $FallbackProcessState }
     $instanceValue = if ($TargetName) { $TargetName } elseif ($sourceInfo -and $sourceInfo.SourceInfo.Instance) { "$($sourceInfo.SourceInfo.Instance)" } else { '' }
 
     $doc = New-Object System.Xml.XmlDocument
@@ -1019,7 +1021,7 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     }
 
     $headersOut = @{
-        'SourceInfoMsg' = (Get-SourceInfoXml -Source $current -SubscriptionFilterParty $TargetParty -SubscriptionFilterId $TargetSubId -ResolvedProcessState $ProcessState -TargetName $Target)
+        'SourceInfoMsg' = (Get-SourceInfoXml -Source $current -SubscriptionFilterParty $TargetParty -SubscriptionFilterId $TargetSubId -FallbackProcessState $(if ($PSBoundParameters.ContainsKey('ProcessState')) { $ProcessState } else { 'Original' }) -UseProvidedProcessState $PSBoundParameters.ContainsKey('ProcessState') -TargetName $Target)
         'SUBFL_source_host' = 'ElasticReinject'
         'BuKeysString' = (ConvertTo-BusinessKeysString -Source $current -ReplacementPairs $ReplacementPairs)
         '_MSGID' = $(if ($NewBusinessCaseIds.IsPresent) { '' } else { $msgId })
