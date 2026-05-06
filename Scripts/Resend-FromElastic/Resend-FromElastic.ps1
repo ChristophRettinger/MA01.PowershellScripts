@@ -35,7 +35,7 @@
     File path containing the Elasticsearch API key.
 
 .PARAMETER ScenarioName
-    ScenarioName wildcard filter. Defaults to '*SUBFL*'.
+    ScenarioName wildcard filter. Defaults to '*SUBFL*'. The default value only applies when no explicit filter argument was provided.
 
 .PARAMETER ProcessName
     ProcessName wildcard filter.
@@ -57,6 +57,7 @@
 
 .PARAMETER WorkflowPattern
     WorkflowPattern filter. Accepts literal values or wildcard expressions.
+    Note: WorkflowPattern alone does not satisfy the mandatory filter requirement.
 
 .PARAMETER ErrorOnly
     Convenience switch to filter WorkflowPattern to 'ERROR'. Cannot be combined with WorkflowPattern values other than 'ERROR'.
@@ -71,10 +72,11 @@
     BK._HCMMSGEVENT filter values.
 
 .PARAMETER Instance
-    Instance filter values.
+    Instance filter values. Instance alone does not satisfy the mandatory filter requirement.
 
 .PARAMETER Environment
     Environment filter values. Valid options: development, testing, staging, production.
+    Environment alone does not satisfy the mandatory filter requirement.
 
 .PARAMETER Action
     Query, Send, Test, or ShowQuery (prints the Elasticsearch request and exits). Defaults to Query.
@@ -743,8 +745,24 @@ foreach ($arr in @($CaseNo,$PatientId,$SubId,$BusinessCaseId,$Category,$Subcateg
 }
 if ($Stage) { $effectiveFilterCount++ }
 if (-not [string]::IsNullOrWhiteSpace($WorkflowPattern)) { $effectiveFilterCount++ }
+$helpScriptPath = if ([string]::IsNullOrWhiteSpace($PSCommandPath)) { $MyInvocation.MyCommand.Path } else { $PSCommandPath }
+
 if ($effectiveFilterCount -eq 0) {
+    Get-Help -Path $helpScriptPath -Detailed
     throw 'At least one filter parameter must be provided.'
+}
+
+$hasRequiredFilter = $false
+foreach ($requiredParameterName in @('StartDate','EndDate','ScenarioName','ProcessName','CaseNo','PatientId','SubId','BusinessCaseId','Stage','Category','Subcategory','HcmMsgEvent')) {
+    if ($PSBoundParameters.ContainsKey($requiredParameterName)) {
+        $hasRequiredFilter = $true
+        break
+    }
+}
+
+if (-not $hasRequiredFilter) {
+    Get-Help -Path $helpScriptPath -Detailed
+    throw 'At least one filter argument is required (for example StartDate/EndDate, ScenarioName, ProcessName, CaseNo, PatientId, SubId, MSGID/BusinessCaseId, Stage, Category, Subcategory, or HcmMsgEvent). Instance, Environment, and WorkflowPattern are not sufficient by themselves.'
 }
 
 if ($Mode -eq 'Curl') {
