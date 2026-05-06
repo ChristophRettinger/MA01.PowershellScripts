@@ -747,14 +747,10 @@ if ($Stage) { $effectiveFilterCount++ }
 if (-not [string]::IsNullOrWhiteSpace($WorkflowPattern)) { $effectiveFilterCount++ }
 $helpScriptPath = if ([string]::IsNullOrWhiteSpace($PSCommandPath)) { $MyInvocation.MyCommand.Path } else { $PSCommandPath }
 
-if ($PSBoundParameters.Count -eq 0) {
-    Get-Help -Path $helpScriptPath -Detailed
+$helpScriptPath
+if ($PSBoundParameters.Count -eq 0 -or $effectiveFilterCount -eq 0) {
+    Get-Help $helpScriptPath
     return
-}
-
-if ($effectiveFilterCount -eq 0) {
-    Get-Help -Path $helpScriptPath -Detailed
-    throw 'At least one filter parameter must be provided.'
 }
 
 $hasRequiredFilter = $false
@@ -766,7 +762,7 @@ foreach ($requiredParameterName in @('StartDate','EndDate','ScenarioName','Proce
 }
 
 if (-not $hasRequiredFilter) {
-    Get-Help -Path $helpScriptPath -Detailed
+    Get-Help $helpScriptPath -Detailed
     throw 'At least one filter argument is required (for example StartDate/EndDate, ScenarioName, ProcessName, CaseNo, PatientId, SubId, MSGID/BusinessCaseId, Stage, Category, Subcategory, or HcmMsgEvent). Instance, Environment, and WorkflowPattern are not sufficient by themselves.'
 }
 
