@@ -70,7 +70,6 @@ param(
     [switch]$ResetCredentials,
 
     [Parameter(Mandatory=$false)]
-    [Alias('Autorename')]
     [switch]$AutoRename,
 
     [Parameter(Mandatory=$false)]

@@ -6,6 +6,6 @@ prod01-wsk,https://prod01.esb.wienkav.at:8443/Orchestra/dfd2a092-4004-4805-9e34-
 prod02-wsk,https://prod02.esb.wienkav.at:8543/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
 prod03-wsk,https://prod03.esb.wienkav.at:8443/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
 prod04-wsk,https://prod04.esb.wienkav.at:8543/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
-ESB-T,http://esbt.wien.gv.at:8119/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
+ESB-T,https://esbt.wien.gv.at:8543/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
 ESB-Q,http://esbq.wien.gv.at:8019/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
 ESB-PROD-B,http://esbprodb.wien.gv.at:8119/Orchestra/dfd2a092-4004-4805-9e34-d40947fd218d/2050848662882009363/ITI_SUBFL_ch_Nachrichten_erneut_einbringen
