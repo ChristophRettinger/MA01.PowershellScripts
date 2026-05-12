@@ -32,6 +32,10 @@
 .PARAMETER ResetCredentials
     Prompts again for stored server credentials.
 
+.PARAMETER AutoRename
+    Renames scenario names before compare/output using substring rules:
+    WIGEV_SUBFL -> ITI_SUBFL and _v01 -> ''.
+
 .PARAMETER OutputDirectory
     Optional directory path. When set, writes a UTF-8 text report file instead of console output.
 
@@ -64,6 +68,10 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$ResetCredentials,
+
+    [Parameter(Mandatory=$false)]
+    [Alias('Autorename')]
+    [switch]$AutoRename,
 
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory,
@@ -161,9 +169,25 @@ function Get-LandscapeTypeIcon {
     switch -Regex ($EntryTypeName) {
         '^Global variable$' { return 'GV' }
         '^database connection$' { return 'DB' }
+        '^Proxy server$' { return 'PR' }
+        '^SAP client connection$' { return 'SA' }
         '^Uniform resource locator$' { return 'UL' }
         default { return '??' }
     }
+}
+
+function Get-NormalizedScenarioName {
+    param(
+        [string]$Name,
+        [switch]$EnableAutoRename
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $Name }
+    if (-not $EnableAutoRename) { return $Name }
+
+    $normalized = $Name -replace 'WIGEV_SUBFL', 'ITI_SUBFL'
+    $normalized = $normalized -replace '_v01', ''
+    return $normalized
 }
 
 function Get-LandscapePropertyMap {
@@ -207,6 +231,7 @@ foreach ($serverName in $Server) {
             $parsed = Parse-DeploymentComment -Comment $_.comment
             [pscustomobject]@{
                 Name = $_.name
+                DisplayName = Get-NormalizedScenarioName -Name ([string]$_.name) -EnableAutoRename:$AutoRename
                 ServiceState = [int]$_.serviceState
                 Active = if ($null -ne $_.active) { [bool]$_.active } else { ([int]$_.serviceState -eq 1) }
                 PersistentSubscription = [int]$_.persistentSubcription
@@ -247,6 +272,7 @@ foreach ($serverName in $Server) {
             }
             $landscapeRows.Add([pscustomobject]@{
                 ScenarioName = [string]$scenario.name
+                DisplayScenarioName = Get-NormalizedScenarioName -Name ([string]$scenario.name) -EnableAutoRename:$AutoRename
                 EntryTypeName = [string]$landscape.entryTypeName
                 TypeIcon = Get-LandscapeTypeIcon -EntryTypeName ([string]$landscape.entryTypeName)
                 EntryName = $entryName
@@ -258,20 +284,20 @@ foreach ($serverName in $Server) {
     $allServerData[$serverName] = @($landscapeRows.ToArray())
 }
 
-$scenarioNames = $allServerData.Values | ForEach-Object { $_.Name } | Sort-Object -Unique
+$scenarioNames = $allServerData.Values | ForEach-Object { $_.DisplayName } | Sort-Object -Unique
 $lines = New-Object System.Collections.Generic.List[string]
 
 if ($Mode -eq 'Landscape') {
     $keys = @('VALUE','TYPE','URL','User','Proxy','Server','Database')
-    $landscapeKeys = $allServerData.Values | ForEach-Object { $_ | ForEach-Object { "$($_.ScenarioName)|$($_.EntryName)" } } | Sort-Object -Unique
+    $landscapeKeys = $allServerData.Values | ForEach-Object { $_ | ForEach-Object { "$($_.DisplayScenarioName)|$($_.EntryTypeName)|$($_.EntryName)" } } | Sort-Object -Unique
     $header = "{0,-49} {1,-2} {2,-34} {3,-14}" -f 'Scenario','T','Name','Value-Type'
     foreach ($srv in $Server) { $header += ("  {0,-52}" -f (Get-ShortServerName -ServerName $srv)) }
     if ($OutputDirectory) { $lines.Add($header) | Out-Null } else { Write-Host $header }
     foreach ($lk in $landscapeKeys) {
-        $scenarioLabel,$entryName = $lk -split '\|',2
+        $scenarioLabel,$entryTypeName,$entryName = $lk -split '\|',3
         $allRowsForKey = @()
         foreach ($srv in $Server) {
-            $allRowsForKey += @($allServerData[$srv] | Where-Object { $_.ScenarioName -eq $scenarioLabel -and $_.EntryName -eq $entryName } | Select-Object -First 1)
+            $allRowsForKey += @($allServerData[$srv] | Where-Object { $_.DisplayScenarioName -eq $scenarioLabel -and $_.EntryTypeName -eq $entryTypeName -and $_.EntryName -eq $entryName } | Select-Object -First 1)
         }
         $icon = (($allRowsForKey | Where-Object { $_ } | Select-Object -First 1).TypeIcon)
         foreach ($valueType in $keys) {
@@ -281,7 +307,7 @@ if ($Mode -eq 'Landscape') {
                 if ($valueType -in @('Server','Database')) { $values += $row.DbVirtual[$valueType] } else { $values += $row.Values[$valueType] }
             }
             if ($valueType -eq 'TYPE') {
-                $entryType = (($allRowsForKey | Where-Object { $_ } | Select-Object -First 1).EntryTypeName)
+                $entryType = $entryTypeName
                 if ($entryType -eq 'Uniform resource locator') { continue }
                 if ($entryType -eq 'Global variable') {
                     $existingTypeValues = @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
@@ -324,7 +350,7 @@ elseif ($Server.Count -eq 1) {
     $single = $allServerData[$Server[0]] | Sort-Object Name
     foreach ($item in $single) {
         $versionShort = Get-VersionDisplayText -GitVersion $item.Parsed.GitVersion
-        $line = "{0,-62} {1,-8} {2,-12} {3}" -f $item.Name, $versionShort, $item.UserName, $item.ModifiedAt
+        $line = "{0,-62} {1,-8} {2,-12} {3}" -f $item.DisplayName, $versionShort, $item.UserName, $item.ModifiedAt
         if ($OutputDirectory) {
             $lines.Add($line) | Out-Null
         } else {
@@ -348,7 +374,7 @@ elseif ($Server.Count -eq 1) {
         $entries = @(
             for ($idx = 0; $idx -lt $Server.Count; $idx++) {
                 $srv = $Server[$idx]
-                $entry = $allServerData[$srv] | Where-Object Name -eq $name | Select-Object -First 1
+                $entry = $allServerData[$srv] | Where-Object DisplayName -eq $name | Select-Object -First 1
                 ,$entry
             }
         )
