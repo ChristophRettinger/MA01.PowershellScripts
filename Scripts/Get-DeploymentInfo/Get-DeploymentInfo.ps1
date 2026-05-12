@@ -332,12 +332,12 @@ if ($Mode -eq 'Landscape') {
             $baseLine = "{0,-49} {1,-2} {2,-34} {3,-14}" -f $scenarioLabel,$icon,$entryName,$valueType
             if ($OutputDirectory) {
                 $line = $baseLine
-                foreach ($v in $values) { $line += ("  {0,-52}" -f $(if($v){$v}else{''})) }
+                foreach ($v in $values) { $line += ("  {0,-52}" -f $(if($v){$v}else{'-'})) }
                 $lines.Add($line) | Out-Null
             } else {
                 Write-Host $baseLine -NoNewline
                 foreach ($v in $values) {
-                    $display = if ($v) { $v } else { '' }
+                    $display = if ($v) { $v } else { '-' }
                     $color = if ($allEqual) { 'Green' } else { 'Yellow' }
                     Write-Host ("  {0,-52}" -f $display) -NoNewline -ForegroundColor $color
                 }
