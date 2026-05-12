@@ -288,15 +288,16 @@ $lines = New-Object System.Collections.Generic.List[string]
 
 if ($Mode -eq 'Landscape') {
     $keys = @('VALUE','TYPE','URL','User','Proxy','Server','Database')
-    $landscapeKeys = $allServerData.Values | ForEach-Object { $_ | ForEach-Object { "$($_.DisplayScenarioName)|$($_.EntryTypeName)|$($_.EntryName)" } } | Sort-Object -Unique
+    $landscapeKeys = $allServerData.Values | ForEach-Object { $_ | ForEach-Object { "$($_.DisplayScenarioName)|$($_.ScenarioName)|$($_.EntryTypeName)|$($_.EntryName)" } } | Sort-Object -Unique
     $header = "{0,-49} {1,-2} {2,-34} {3,-14}" -f 'Scenario','T','Name','Value-Type'
     foreach ($srv in $Server) { $header += ("  {0,-52}" -f (Get-ShortServerName -ServerName $srv)) }
     if ($OutputDirectory) { $lines.Add($header) | Out-Null } else { Write-Host $header }
     foreach ($lk in $landscapeKeys) {
-        $scenarioLabel,$entryTypeName,$entryName = $lk -split '\|',3
+        $scenarioLabel,$scenarioNameKey,$entryTypeName,$entryName = $lk -split '\|',4
+        $scenarioOutputLabel = if ($scenarioLabel -eq $scenarioNameKey) { $scenarioLabel } else { "$($scenarioLabel) <$($scenarioNameKey)>" }
         $allRowsForKey = @()
         foreach ($srv in $Server) {
-            $allRowsForKey += @($allServerData[$srv] | Where-Object { $_.DisplayScenarioName -eq $scenarioLabel -and $_.EntryTypeName -eq $entryTypeName -and $_.EntryName -eq $entryName } | Select-Object -First 1)
+            $allRowsForKey += @($allServerData[$srv] | Where-Object { $_.DisplayScenarioName -eq $scenarioLabel -and $_.ScenarioName -eq $scenarioNameKey -and $_.EntryTypeName -eq $entryTypeName -and $_.EntryName -eq $entryName } | Select-Object -First 1)
         }
         $icon = (($allRowsForKey | Where-Object { $_ } | Select-Object -First 1).TypeIcon)
         foreach ($valueType in $keys) {
@@ -339,7 +340,7 @@ if ($Mode -eq 'Landscape') {
                     continue
                 }
             }
-            $baseLine = "{0,-49} {1,-2} {2,-34} {3,-14}" -f $scenarioLabel,$icon,$entryName,$valueType
+            $baseLine = "{0,-49} {1,-2} {2,-34} {3,-14}" -f $scenarioOutputLabel,$icon,$entryName,$valueType
             if ($OutputDirectory) {
                 $line = $baseLine
                 foreach ($v in $values) { $line += ("  {0,-52}" -f $(if($v){$v}else{'-'})) }
