@@ -214,6 +214,7 @@ The summary output tracks first/last occurrence, count, severity, flattened stat
 ## Deployment status overview notes
 
 `Get-DeploymentInfo` derives scenario state indicators from `active` and `persistentSubcription` values (with `serviceState` fallback for older responses) and keeps version comparison coloring limited to the displayed version numbers. `OnlyDifferences` now also keeps rows where a scenario is missing on one or more compared servers. Version output now keeps fixed-width alignment while replacing numeric leading zeros with spaces.
+Landscape mode now materializes per-server landscape rows as a plain object array before storing them in the server map to avoid type-mismatch assignment errors during landscape comparisons.
 
 ## HL7 message send notes
 

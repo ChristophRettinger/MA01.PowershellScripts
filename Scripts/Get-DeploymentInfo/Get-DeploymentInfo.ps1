@@ -183,7 +183,7 @@ function Get-DbVirtualProperties {
     return $result
 }
 
-$allServerData = @{}
+[hashtable]$allServerData = @{}
 foreach ($serverName in $Server) {
     $baseUrl = Get-ServerBaseUrl -ServerName $serverName
     $scenarioInfoUrl = "$($baseUrl)/OrchDyn/deployment/scenarioInfos"
@@ -246,7 +246,7 @@ foreach ($serverName in $Server) {
             }) | Out-Null
         }
     }
-    $allServerData[$serverName] = @($landscapeRows)
+    $allServerData[$serverName] = @($landscapeRows.ToArray())
 }
 
 $scenarioNames = $allServerData.Values | ForEach-Object { $_.Name } | Sort-Object -Unique
