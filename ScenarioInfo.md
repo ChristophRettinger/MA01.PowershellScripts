@@ -234,4 +234,4 @@ The summary output tracks first/last occurrence, count, severity, flattened stat
 
 ## Deployment info script notes
 
-`Get-DeploymentInfo` calls `/OrchDyn/deployment/scenarioInfos` on one or more Orchestra servers and compares scenario comment versions (for example `g089-2441-p75-v`) side by side. It supports per-server credential caching via CLIXML, regex filtering by scenario name, and an `OnlyDifferences` mode for cross-server version review.
+`Get-DeploymentInfo` calls `/OrchDyn/deployment/scenarioInfos` on one or more Orchestra servers and compares scenario comment versions (for example `g089-2441-p75-v`) side by side. It supports per-server credential caching via CLIXML, regex filtering by scenario name, short-name server headers for comparison output, state-colored indicators, and an `OnlyDifferences` mode for cross-server version review.

@@ -106,11 +106,13 @@ function Get-StateColorName {
 }
 
 function Get-Indicator {
+    return [pscustomobject]@{ Char = '■' }
+}
+
+function Get-ShortServerName {
     param([string]$ServerName)
-    $palette = @('Blue','Cyan','Green','Magenta','DarkCyan','DarkGreen','DarkMagenta','DarkBlue')
-    $sum = 0
-    foreach ($c in $ServerName.ToCharArray()) { $sum += [int][char]$c }
-    return [pscustomobject]@{ Char = '■'; Color = $palette[$sum % $palette.Count] }
+    if ([string]::IsNullOrWhiteSpace($ServerName)) { return $ServerName }
+    return ($ServerName -split '[\.-]')[0]
 }
 
 $allServerData = @{}
@@ -155,12 +157,16 @@ if ($Server.Count -eq 1) {
         }
     }
 } else {
-    $legend = ($Server | ForEach-Object {
-        $i = Get-Indicator -ServerName $_
-        if (-not $OutputDirectory) { Write-Host "$($i.Char) $_" -ForegroundColor $i.Color }
-        "[$($i.Char)=$($_)]"
-    }) -join ' '
-    if ($OutputDirectory) { $lines.Add($legend) | Out-Null }
+    $header = "{0,-62}" -f 'Scenario'
+    for ($idx = 0; $idx -lt $Server.Count; $idx++) {
+        $shortName = Get-ShortServerName -ServerName $Server[$idx]
+        $header += ("  {0,-12}" -f $shortName)
+    }
+    if ($OutputDirectory) {
+        $lines.Add($header) | Out-Null
+    } else {
+        Write-Host $header
+    }
 
     foreach ($name in $scenarioNames) {
         $entries = foreach ($srv in $Server) {
@@ -187,18 +193,18 @@ if ($Server.Count -eq 1) {
             $max = if ($versions.Count -gt 0) { ($versions | Measure-Object -Maximum).Maximum } else { -1 }
             for ($idx = 0; $idx -lt $Server.Count; $idx++) {
                 $entry = $entries[$idx]
-                $indicator = Get-Indicator -ServerName $Server[$idx]
+                $indicator = Get-Indicator
                 Write-Host '  ' -NoNewline
-                Write-Host $indicator.Char -NoNewline -ForegroundColor $indicator.Color
-                Write-Host ' ' -NoNewline
                 if (-not $entry) {
-                    Write-Host '-' -NoNewline -ForegroundColor DarkGray
+                    Write-Host ("{0,-12}" -f '-') -NoNewline -ForegroundColor DarkGray
                     continue
                 }
                 $v = $entry.Parsed.GitVersion
                 if ($v -match '^[gG](.+)$') { $v = $Matches[1] }
                 $vc = if ($entry.GitNumeric -eq $max) { 'Green' } elseif ($allEqual) { 'White' } else { 'DarkYellow' }
-                Write-Host $v -NoNewline -ForegroundColor $vc
+                Write-Host $indicator.Char -NoNewline -ForegroundColor $vc
+                Write-Host ' ' -NoNewline
+                Write-Host ("{0,-10}" -f $v) -NoNewline -ForegroundColor $vc
             }
             Write-Host ''
         }
