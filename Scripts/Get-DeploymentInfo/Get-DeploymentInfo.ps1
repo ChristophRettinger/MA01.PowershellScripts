@@ -160,7 +160,7 @@ function Get-Indicator {
 function Get-ShortServerName {
     param([string]$ServerName)
     if ([string]::IsNullOrWhiteSpace($ServerName)) { return $ServerName }
-    return ($ServerName -split '[\.-]')[0]
+    return $ServerName
 }
 
 function Get-LandscapeTypeIcon {
@@ -319,8 +319,9 @@ if ($Mode -eq 'Landscape') {
                 if (-not $showUrl) { continue }
             }
             $existingValues = @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-            if ($existingValues.Count -eq 0) { continue }
-            $allEqual = (($existingValues | Select-Object -Unique).Count -eq 1) -and ($values.Count -eq $Server.Count)
+            $hasMissingValue = ($values | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0
+            if ($existingValues.Count -eq 0 -and -not $hasMissingValue) { continue }
+            $allEqual = (($existingValues | Select-Object -Unique).Count -eq 1) -and -not $hasMissingValue
             if ($OnlyDifferences) {
                 if ($valueType -in @('Server','Database')) {
                     if ($allEqual) { continue }
