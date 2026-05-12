@@ -112,9 +112,9 @@ function Get-VersionDisplayText {
 function Get-StateColorName {
     param([int]$PersistentSubscription,[bool]$Active)
     if ($PersistentSubscription -ne 1 -and $Active) { return 'DarkGray' }
-    if ($PersistentSubscription -ne 1 -and -not $Active) { return 'DarkYellow' }
+    if ($PersistentSubscription -ne 1 -and -not $Active) { return 'DarkRed' }
     if ($Active) { return 'White' }
-    return 'Yellow'
+    return 'Red'
 }
 
 function Get-Indicator {
