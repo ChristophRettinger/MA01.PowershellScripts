@@ -300,11 +300,21 @@ if ($Mode -eq 'Landscape') {
         }
         $icon = (($allRowsForKey | Where-Object { $_ } | Select-Object -First 1).TypeIcon)
         foreach ($valueType in $keys) {
-            $values = @()
-            foreach ($row in $allRowsForKey) {
-                if (-not $row) { $values += $null; continue }
-                if ($valueType -in @('Server','Database')) { $values += $row.DbVirtual[$valueType] } else { $values += $row.Values[$valueType] }
+            $valuesByServer = @{}
+            for ($idx = 0; $idx -lt $Server.Count; $idx++) {
+                $serverName = $Server[$idx]
+                $row = $allRowsForKey[$idx]
+                if (-not $row) {
+                    $valuesByServer[$serverName] = $null
+                    continue
+                }
+                if ($valueType -in @('Server','Database')) {
+                    $valuesByServer[$serverName] = $row.DbVirtual[$valueType]
+                } else {
+                    $valuesByServer[$serverName] = $row.Values[$valueType]
+                }
             }
+            $values = foreach ($serverName in $Server) { $valuesByServer[$serverName] }
             if ($valueType -eq 'TYPE') {
                 $entryType = $entryTypeName
                 if ($entryType -eq 'Uniform resource locator') { continue }
@@ -321,7 +331,7 @@ if ($Mode -eq 'Landscape') {
             $existingValues = @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             $hasMissingValue = ($values | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0
             if ($existingValues.Count -eq 0) { continue }
-            $allEqual = (($existingValues | Select-Object -Unique).Count -eq 1) -and -not $hasMissingValue
+            $allEqual = (($values | Select-Object -Unique).Count -eq 1) -and -not $hasMissingValue
             if ($OnlyDifferences) {
                 if ($valueType -in @('Server','Database')) {
                     if ($allEqual) { continue }
