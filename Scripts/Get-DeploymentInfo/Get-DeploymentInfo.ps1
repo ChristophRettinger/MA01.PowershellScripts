@@ -320,7 +320,7 @@ if ($Mode -eq 'Landscape') {
             }
             $existingValues = @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             $hasMissingValue = ($values | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0
-            if ($existingValues.Count -eq 0 -and -not $hasMissingValue) { continue }
+            if ($existingValues.Count -eq 0) { continue }
             $allEqual = (($existingValues | Select-Object -Unique).Count -eq 1) -and -not $hasMissingValue
             if ($OnlyDifferences) {
                 if ($valueType -in @('Server','Database')) {
@@ -332,12 +332,12 @@ if ($Mode -eq 'Landscape') {
             $baseLine = "{0,-49} {1,-2} {2,-34} {3,-14}" -f $scenarioLabel,$icon,$entryName,$valueType
             if ($OutputDirectory) {
                 $line = $baseLine
-                foreach ($v in $values) { $line += ("  {0,-52}" -f $(if($v){$v}else{'-'})) }
+                foreach ($v in $values) { $line += ("  {0,-52}" -f $(if($v){$v}else{''})) }
                 $lines.Add($line) | Out-Null
             } else {
                 Write-Host $baseLine -NoNewline
                 foreach ($v in $values) {
-                    $display = if ($v) { $v } else { '-' }
+                    $display = if ($v) { $v } else { '' }
                     $color = if ($allEqual) { 'Green' } else { 'Yellow' }
                     Write-Host ("  {0,-52}" -f $display) -NoNewline -ForegroundColor $color
                 }
