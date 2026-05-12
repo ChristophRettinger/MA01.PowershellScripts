@@ -19,6 +19,16 @@
 .PARAMETER ScenarioName
     Regex filter applied to scenario name. Defaults to SUBFL.
 
+.PARAMETER Mode
+    Version (default) keeps current deployment version comparison behaviour.
+    Landscape lists and compares relevant landscape values per scenario.
+
+.PARAMETER LandscapeName
+    Optional regex filter for landscape entry names when Mode = Landscape.
+
+.PARAMETER LandscapeIgnoreList
+    Optional list of regex filters to ignore landscape names. Defaults to ee_orch_instance.
+
 .PARAMETER ResetCredentials
     Prompts again for stored server credentials.
 
@@ -36,6 +46,16 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string]$ScenarioName = 'SUBFL',
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Version','Landscape')]
+    [string]$Mode = 'Version',
+
+    [Parameter(Mandatory=$false)]
+    [string]$LandscapeName,
+
+    [Parameter(Mandatory=$false)]
+    [string[]]$LandscapeIgnoreList = @('ee_orch_instance'),
 
     [Parameter(Mandatory=$false)]
     [switch]$ResetCredentials,
@@ -127,36 +147,158 @@ function Get-ShortServerName {
     return ($ServerName -split '[\.-]')[0]
 }
 
+function Get-LandscapeTypeIcon {
+    param([string]$EntryTypeName)
+    switch -Regex ($EntryTypeName) {
+        '^Global variable$' { return '🔤' }
+        '^database connection$' { return '🗄️' }
+        '^Uniform resource locator$' { return '🌐' }
+        default { return '❔' }
+    }
+}
+
+function Get-LandscapePropertyMap {
+    param([object[]]$Properties)
+    $map = @{}
+    foreach ($prop in @($Properties)) {
+        if ($null -eq $prop.name) { continue }
+        $name = [string]$prop.name
+        if ($name -in @('VALUE','TYPE','URL','User','Proxy')) {
+            $map[$name] = [string]$prop.value
+        }
+    }
+    return $map
+}
+
+function Get-DbVirtualProperties {
+    param([string]$UrlValue)
+    $result = @{}
+    if ([string]::IsNullOrWhiteSpace($UrlValue)) { return $result }
+    if ($UrlValue -match '^jdbc:[^:]+://([^;]+)') {
+        $result['Server'] = $Matches[1]
+    }
+    if ($UrlValue -match '(?:^|;)DatabaseName=([^;]+)') {
+        $result['DatabaseName'] = $Matches[1]
+    }
+    return $result
+}
+
 $allServerData = @{}
 foreach ($serverName in $Server) {
     $baseUrl = Get-ServerBaseUrl -ServerName $serverName
-    $url = "$($baseUrl)/OrchDyn/deployment/scenarioInfos"
+    $scenarioInfoUrl = "$($baseUrl)/OrchDyn/deployment/scenarioInfos"
     $cred = Get-CredentialForServer -ServerName $serverName
 
-    Write-Verbose "GET $($url)"
-    $response = Invoke-RestMethod -Uri $url -Method Get -Authentication Basic -Credential $cred
+    Write-Verbose "GET $($scenarioInfoUrl)"
+    $response = Invoke-RestMethod -Uri $scenarioInfoUrl -Method Get -Authentication Basic -Credential $cred
     $filtered = $response | Where-Object { $_.name -match $ScenarioName }
 
-    $allServerData[$serverName] = @($filtered | ForEach-Object {
-        $parsed = Parse-DeploymentComment -Comment $_.comment
-        [pscustomobject]@{
-            Name = $_.name
-            ServiceState = [int]$_.serviceState
-            Active = if ($null -ne $_.active) { [bool]$_.active } else { ([int]$_.serviceState -eq 1) }
-            PersistentSubscription = [int]$_.persistentSubcription
-            UserName = $_.userName
-            ModifiedAt = $_.modifiedAt
-            Comment = $_.comment
-            Parsed = $parsed
-            GitNumeric = Get-ParsedVersionNumber -GitVersion $parsed.GitVersion
+    if ($Mode -eq 'Version') {
+        $allServerData[$serverName] = @($filtered | ForEach-Object {
+            $parsed = Parse-DeploymentComment -Comment $_.comment
+            [pscustomobject]@{
+                Name = $_.name
+                ServiceState = [int]$_.serviceState
+                Active = if ($null -ne $_.active) { [bool]$_.active } else { ([int]$_.serviceState -eq 1) }
+                PersistentSubscription = [int]$_.persistentSubcription
+                UserName = $_.userName
+                ModifiedAt = $_.modifiedAt
+                Comment = $_.comment
+                Parsed = $parsed
+                GitNumeric = Get-ParsedVersionNumber -GitVersion $parsed.GitVersion
+            }
+        })
+        continue
+    }
+
+    $landscapeRows = New-Object System.Collections.Generic.List[object]
+    foreach ($scenario in @($filtered)) {
+        $scenarioId = $scenario.scenarioID
+        $landscapeInfosUrl = "$($baseUrl)/OrchDyn/landscape/infos/$($scenarioId)"
+        Write-Verbose "GET $($landscapeInfosUrl)"
+        $landscapeInfos = Invoke-RestMethod -Uri $landscapeInfosUrl -Method Get -Authentication Basic -Credential $cred
+        foreach ($landscape in @($landscapeInfos)) {
+            $entryName = [string]$landscape.entryName
+            if ($LandscapeName -and ($entryName -notmatch $LandscapeName)) { continue }
+            $ignore = $false
+            foreach ($ignoreRegex in @($LandscapeIgnoreList)) {
+                if ($entryName -match $ignoreRegex) { $ignore = $true; break }
+            }
+            if ($ignore) { continue }
+
+            if ($landscape.reference -notmatch '\}([0-9]+)$') { continue }
+            $landscapeRefId = $Matches[1]
+            $propertiesUrl = "$($baseUrl)/OrchDyn/landscape/properties/$($scenarioId)/$($landscapeRefId)"
+            Write-Verbose "GET $($propertiesUrl)"
+            $properties = Invoke-RestMethod -Uri $propertiesUrl -Method Get -Authentication Basic -Credential $cred
+            $propertyMap = Get-LandscapePropertyMap -Properties @($properties)
+            $dbVirtual = @{}
+            if ([string]$landscape.entryTypeName -eq 'database connection') {
+                $dbVirtual = Get-DbVirtualProperties -UrlValue $propertyMap['URL']
+            }
+            $landscapeRows.Add([pscustomobject]@{
+                ScenarioName = [string]$scenario.name
+                EntryTypeName = [string]$landscape.entryTypeName
+                TypeIcon = Get-LandscapeTypeIcon -EntryTypeName ([string]$landscape.entryTypeName)
+                EntryName = $entryName
+                Values = $propertyMap
+                DbVirtual = $dbVirtual
+            }) | Out-Null
         }
-    })
+    }
+    $allServerData[$serverName] = @($landscapeRows)
 }
 
 $scenarioNames = $allServerData.Values | ForEach-Object { $_.Name } | Sort-Object -Unique
 $lines = New-Object System.Collections.Generic.List[string]
 
-if ($Server.Count -eq 1) {
+if ($Mode -eq 'Landscape') {
+    $keys = @('VALUE','TYPE','URL','User','Proxy','Server','DatabaseName')
+    $landscapeKeys = $allServerData.Values | ForEach-Object { $_ | ForEach-Object { "$($_.ScenarioName)|$($_.EntryName)" } } | Sort-Object -Unique
+    $header = "{0,-42} {1,-3} {2,-34} {3,-14}" -f 'Scenario','T','Name','Value-Type'
+    foreach ($srv in $Server) { $header += ("  {0,-32}" -f (Get-ShortServerName -ServerName $srv)) }
+    if ($OutputDirectory) { $lines.Add($header) | Out-Null } else { Write-Host $header }
+    foreach ($lk in $landscapeKeys) {
+        $scenarioLabel,$entryName = $lk -split '\|',2
+        $allRowsForKey = @()
+        foreach ($srv in $Server) {
+            $allRowsForKey += @($allServerData[$srv] | Where-Object { $_.ScenarioName -eq $scenarioLabel -and $_.EntryName -eq $entryName } | Select-Object -First 1)
+        }
+        $icon = (($allRowsForKey | Where-Object { $_ } | Select-Object -First 1).TypeIcon)
+        foreach ($valueType in $keys) {
+            $values = @()
+            foreach ($row in $allRowsForKey) {
+                if (-not $row) { $values += $null; continue }
+                if ($valueType -in @('Server','DatabaseName')) { $values += $row.DbVirtual[$valueType] } else { $values += $row.Values[$valueType] }
+            }
+            $existingValues = @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if ($existingValues.Count -eq 0) { continue }
+            $allEqual = (($existingValues | Select-Object -Unique).Count -eq 1) -and ($values.Count -eq $Server.Count)
+            if ($OnlyDifferences) {
+                if ($valueType -in @('Server','DatabaseName')) {
+                    if ($allEqual) { continue }
+                } else {
+                    continue
+                }
+            }
+            $baseLine = "{0,-42} {1,-3} {2,-34} {3,-14}" -f $scenarioLabel,$icon,$entryName,$valueType
+            if ($OutputDirectory) {
+                $line = $baseLine
+                foreach ($v in $values) { $line += ("  {0,-32}" -f $(if($v){$v}else{'-'})) }
+                $lines.Add($line) | Out-Null
+            } else {
+                Write-Host $baseLine -NoNewline
+                foreach ($v in $values) {
+                    $display = if ($v) { $v } else { '-' }
+                    $color = if ($allEqual) { 'Green' } else { 'Yellow' }
+                    Write-Host ("  {0,-32}" -f $display) -NoNewline -ForegroundColor $color
+                }
+                Write-Host ''
+            }
+        }
+    }
+}
+elseif ($Server.Count -eq 1) {
     $single = $allServerData[$Server[0]] | Sort-Object Name
     foreach ($item in $single) {
         $versionShort = Get-VersionDisplayText -GitVersion $item.Parsed.GitVersion
