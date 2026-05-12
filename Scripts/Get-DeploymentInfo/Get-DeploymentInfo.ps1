@@ -97,6 +97,18 @@ function Get-ParsedVersionNumber {
     return -1
 }
 
+function Get-VersionDisplayText {
+    param([string]$GitVersion)
+
+    if ([string]::IsNullOrWhiteSpace($GitVersion)) { return '' }
+    $display = $GitVersion
+    if ($display -match '^[gG](.+)$') { $display = $Matches[1] }
+    if ($display -match '^0+(?=\d)') {
+        $display = [regex]::Replace($display, '^0+(?=\d)', { param($m) ' ' * $m.Length })
+    }
+    return $display
+}
+
 function Get-StateColorName {
     param([int]$PersistentSubscription,[int]$ServiceState)
     if ($PersistentSubscription -ne 1 -and $ServiceState -eq 1) { return 'DarkGray' }
@@ -146,8 +158,7 @@ $lines = New-Object System.Collections.Generic.List[string]
 if ($Server.Count -eq 1) {
     $single = $allServerData[$Server[0]] | Sort-Object Name
     foreach ($item in $single) {
-        $versionShort = $item.Parsed.GitVersion
-        if ($versionShort -match '^[gG](.+)$') { $versionShort = $Matches[1] }
+        $versionShort = Get-VersionDisplayText -GitVersion $item.Parsed.GitVersion
         $line = "{0,-62} {1,-8} {2,-12} {3}" -f $item.Name, $versionShort, $item.UserName, $item.ModifiedAt
         if ($OutputDirectory) {
             $lines.Add($line) | Out-Null
@@ -184,7 +195,7 @@ if ($Server.Count -eq 1) {
                 $entry = $entries[$idx]
                 if (-not $entry) { $parts += "-"; continue }
                 $v = $entry.Parsed.GitVersion
-                if ($v -match '^[gG](.+)$') { $v = $Matches[1] }
+                $v = Get-VersionDisplayText -GitVersion $v
                 $parts += "$($Server[$idx]):$($v)"
             }
             $lines.Add(("{0,-62} {1}" -f $name, ($parts -join ' | '))) | Out-Null
@@ -200,9 +211,10 @@ if ($Server.Count -eq 1) {
                     continue
                 }
                 $v = $entry.Parsed.GitVersion
-                if ($v -match '^[gG](.+)$') { $v = $Matches[1] }
+                $v = Get-VersionDisplayText -GitVersion $v
+                $stateColor = Get-StateColorName -PersistentSubscription $entry.PersistentSubscription -ServiceState $entry.ServiceState
                 $vc = if ($entry.GitNumeric -eq $max) { 'Green' } elseif ($allEqual) { 'White' } else { 'DarkYellow' }
-                Write-Host $indicator.Char -NoNewline -ForegroundColor $vc
+                Write-Host $indicator.Char -NoNewline -ForegroundColor $stateColor
                 Write-Host ' ' -NoNewline
                 Write-Host ("{0,-10}" -f $v) -NoNewline -ForegroundColor $vc
             }
