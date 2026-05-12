@@ -34,6 +34,11 @@
 
 .PARAMETER OutputDirectory
     Optional directory path. When set, writes a UTF-8 text report file instead of console output.
+
+.PARAMETER IncludeDBUrl
+    Controls whether full JDBC URL values are shown in landscape compare output.
+    SingleServer (default) shows URL only for single-server calls, Always always shows URL,
+    Never hides URL values while still showing parsed Server and Database.
 #>
 
 [CmdletBinding()]
@@ -61,7 +66,11 @@ param(
     [switch]$ResetCredentials,
 
     [Parameter(Mandatory=$false)]
-    [string]$OutputDirectory
+    [string]$OutputDirectory,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Always','Never','SingleServer')]
+    [string]$IncludeDBUrl = 'SingleServer'
 )
 
 function Get-CredentialForServer {
@@ -150,10 +159,10 @@ function Get-ShortServerName {
 function Get-LandscapeTypeIcon {
     param([string]$EntryTypeName)
     switch -Regex ($EntryTypeName) {
-        '^Global variable$' { return '🔤' }
-        '^database connection$' { return '🗄️' }
-        '^Uniform resource locator$' { return '🌐' }
-        default { return '❔' }
+        '^Global variable$' { return 'GV' }
+        '^database connection$' { return 'DB' }
+        '^Uniform resource locator$' { return 'UL' }
+        default { return '??' }
     }
 }
 
@@ -178,7 +187,7 @@ function Get-DbVirtualProperties {
         $result['Server'] = $Matches[1]
     }
     if ($UrlValue -match '(?:^|;)DatabaseName=([^;]+)') {
-        $result['DatabaseName'] = $Matches[1]
+        $result['Database'] = $Matches[1]
     }
     return $result
 }
@@ -253,10 +262,10 @@ $scenarioNames = $allServerData.Values | ForEach-Object { $_.Name } | Sort-Objec
 $lines = New-Object System.Collections.Generic.List[string]
 
 if ($Mode -eq 'Landscape') {
-    $keys = @('VALUE','TYPE','URL','User','Proxy','Server','DatabaseName')
+    $keys = @('VALUE','TYPE','URL','User','Proxy','Server','Database')
     $landscapeKeys = $allServerData.Values | ForEach-Object { $_ | ForEach-Object { "$($_.ScenarioName)|$($_.EntryName)" } } | Sort-Object -Unique
-    $header = "{0,-42} {1,-3} {2,-34} {3,-14}" -f 'Scenario','T','Name','Value-Type'
-    foreach ($srv in $Server) { $header += ("  {0,-32}" -f (Get-ShortServerName -ServerName $srv)) }
+    $header = "{0,-49} {1,-2} {2,-34} {3,-14}" -f 'Scenario','T','Name','Value-Type'
+    foreach ($srv in $Server) { $header += ("  {0,-52}" -f (Get-ShortServerName -ServerName $srv)) }
     if ($OutputDirectory) { $lines.Add($header) | Out-Null } else { Write-Host $header }
     foreach ($lk in $landscapeKeys) {
         $scenarioLabel,$entryName = $lk -split '\|',2
@@ -269,29 +278,42 @@ if ($Mode -eq 'Landscape') {
             $values = @()
             foreach ($row in $allRowsForKey) {
                 if (-not $row) { $values += $null; continue }
-                if ($valueType -in @('Server','DatabaseName')) { $values += $row.DbVirtual[$valueType] } else { $values += $row.Values[$valueType] }
+                if ($valueType -in @('Server','Database')) { $values += $row.DbVirtual[$valueType] } else { $values += $row.Values[$valueType] }
+            }
+            if ($valueType -eq 'TYPE') {
+                $entryType = (($allRowsForKey | Where-Object { $_ } | Select-Object -First 1).EntryTypeName)
+                if ($entryType -eq 'Uniform resource locator') { continue }
+                if ($entryType -eq 'Global variable') {
+                    $existingTypeValues = @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+                    $uniqueTypes = @($existingTypeValues | Select-Object -Unique)
+                    if ($uniqueTypes.Count -eq 1 -and $uniqueTypes[0] -eq 'Text') { continue }
+                }
+            }
+            if ($valueType -eq 'URL') {
+                $showUrl = ($IncludeDBUrl -eq 'Always') -or (($IncludeDBUrl -eq 'SingleServer') -and ($Server.Count -eq 1))
+                if (-not $showUrl) { continue }
             }
             $existingValues = @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             if ($existingValues.Count -eq 0) { continue }
             $allEqual = (($existingValues | Select-Object -Unique).Count -eq 1) -and ($values.Count -eq $Server.Count)
             if ($OnlyDifferences) {
-                if ($valueType -in @('Server','DatabaseName')) {
+                if ($valueType -in @('Server','Database')) {
                     if ($allEqual) { continue }
                 } else {
                     continue
                 }
             }
-            $baseLine = "{0,-42} {1,-3} {2,-34} {3,-14}" -f $scenarioLabel,$icon,$entryName,$valueType
+            $baseLine = "{0,-49} {1,-2} {2,-34} {3,-14}" -f $scenarioLabel,$icon,$entryName,$valueType
             if ($OutputDirectory) {
                 $line = $baseLine
-                foreach ($v in $values) { $line += ("  {0,-32}" -f $(if($v){$v}else{'-'})) }
+                foreach ($v in $values) { $line += ("  {0,-52}" -f $(if($v){$v}else{'-'})) }
                 $lines.Add($line) | Out-Null
             } else {
                 Write-Host $baseLine -NoNewline
                 foreach ($v in $values) {
                     $display = if ($v) { $v } else { '-' }
                     $color = if ($allEqual) { 'Green' } else { 'Yellow' }
-                    Write-Host ("  {0,-32}" -f $display) -NoNewline -ForegroundColor $color
+                    Write-Host ("  {0,-52}" -f $display) -NoNewline -ForegroundColor $color
                 }
                 Write-Host ''
             }
