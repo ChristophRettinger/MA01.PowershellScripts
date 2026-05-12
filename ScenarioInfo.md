@@ -211,6 +211,10 @@ When the current commit is not directly tagged, the status column shows the most
 For grouping stability, the script supports a settings file with `regex;replacement` normalization rules that are applied before aggregation.
 The summary output tracks first/last occurrence, count, severity, flattened statement text, and the first stacktrace line.
 
+## Deployment status overview notes
+
+`Get-DeploymentInfo` derives scenario state indicators from `serviceState` and `persistentSubcription` values and keeps version comparison coloring limited to the displayed version numbers. Version output now keeps fixed-width alignment while replacing numeric leading zeros with spaces.
+
 ## HL7 message send notes
 
 `Send-HL7Message` sends HL7 payloads via MLLP using `-Protocol Tcp`, `-Protocol Tls`, or `-Protocol TlsWithCertificate` with configurable wire encoding. It supports file-based input (`-Path`) and dynamic request creation (`-Message A19` plus `-AID`, optional `-Sender`), prints the outbound request in color, and can continue despite TLS certificate policy errors when `-IgnoreTlsError` is used (warnings are still written). Replies are extracted from MLLP framing and either printed with colorized HL7 separators (`|`, `^`, `~`, `\`, `&`) or saved as UTF-8 via `-ResponsePath`; if no response arrives, the script now emits an explicit error with protocol guidance.
