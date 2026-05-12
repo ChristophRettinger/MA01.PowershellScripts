@@ -110,10 +110,10 @@ function Get-VersionDisplayText {
 }
 
 function Get-StateColorName {
-    param([int]$PersistentSubscription,[int]$ServiceState)
-    if ($PersistentSubscription -ne 1 -and $ServiceState -eq 1) { return 'DarkGray' }
-    if ($PersistentSubscription -ne 1 -and $ServiceState -ne 1) { return 'DarkYellow' }
-    if ($ServiceState -eq 1) { return 'White' }
+    param([int]$PersistentSubscription,[bool]$Active)
+    if ($PersistentSubscription -ne 1 -and $Active) { return 'DarkGray' }
+    if ($PersistentSubscription -ne 1 -and -not $Active) { return 'DarkYellow' }
+    if ($Active) { return 'White' }
     return 'Yellow'
 }
 
@@ -142,6 +142,7 @@ foreach ($serverName in $Server) {
         [pscustomobject]@{
             Name = $_.name
             ServiceState = [int]$_.serviceState
+            Active = if ($null -ne $_.active) { [bool]$_.active } else { ([int]$_.serviceState -eq 1) }
             PersistentSubscription = [int]$_.persistentSubcription
             UserName = $_.userName
             ModifiedAt = $_.modifiedAt
@@ -163,7 +164,7 @@ if ($Server.Count -eq 1) {
         if ($OutputDirectory) {
             $lines.Add($line) | Out-Null
         } else {
-            $color = Get-StateColorName -PersistentSubscription $item.PersistentSubscription -ServiceState $item.ServiceState
+            $color = Get-StateColorName -PersistentSubscription $item.PersistentSubscription -Active $item.Active
             Write-Host $line -ForegroundColor $color
         }
     }
@@ -187,7 +188,8 @@ if ($Server.Count -eq 1) {
 
         $versions = @($entries | Where-Object { $_ } | ForEach-Object { $_.GitNumeric })
         $allEqual = ($versions.Count -gt 0) -and (($versions | Select-Object -Unique).Count -eq 1)
-        if ($OnlyDifferences -and $allEqual) { continue }
+        $hasMissingDeployment = ($entries | Where-Object { -not $_ }).Count -gt 0
+        if ($OnlyDifferences -and $allEqual -and -not $hasMissingDeployment) { continue }
 
         if ($OutputDirectory) {
             $parts = @()
@@ -212,7 +214,7 @@ if ($Server.Count -eq 1) {
                 }
                 $v = $entry.Parsed.GitVersion
                 $v = Get-VersionDisplayText -GitVersion $v
-                $stateColor = Get-StateColorName -PersistentSubscription $entry.PersistentSubscription -ServiceState $entry.ServiceState
+                $stateColor = Get-StateColorName -PersistentSubscription $entry.PersistentSubscription -Active $entry.Active
                 $vc = if ($entry.GitNumeric -eq $max) { 'Green' } elseif ($allEqual) { 'White' } else { 'DarkYellow' }
                 Write-Host $indicator.Char -NoNewline -ForegroundColor $stateColor
                 Write-Host ' ' -NoNewline
