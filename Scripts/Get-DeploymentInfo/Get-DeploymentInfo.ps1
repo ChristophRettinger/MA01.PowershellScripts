@@ -181,10 +181,14 @@ if ($Server.Count -eq 1) {
     }
 
     foreach ($name in $scenarioNames) {
-        $entries = foreach ($srv in $Server) {
-            $allServerData[$srv] | Where-Object Name -eq $name | Select-Object -First 1
-        }
-        if (-not ($entries | Where-Object { $_ })) { continue }
+        $entries = @(
+            for ($idx = 0; $idx -lt $Server.Count; $idx++) {
+                $srv = $Server[$idx]
+                $entry = $allServerData[$srv] | Where-Object Name -eq $name | Select-Object -First 1
+                ,$entry
+            }
+        )
+        if (-not ($entries | Where-Object { $null -ne $_ })) { continue }
 
         $versions = @($entries | Where-Object { $_ } | ForEach-Object { $_.GitNumeric })
         $allEqual = ($versions.Count -gt 0) -and (($versions | Select-Object -Unique).Count -eq 1)
