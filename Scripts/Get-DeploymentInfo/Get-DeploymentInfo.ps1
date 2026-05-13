@@ -30,6 +30,9 @@
     Version mode: show only scenarios where versions differ or a server is missing the scenario.
     Landscape mode: show only entries where property values differ across servers that have the entry.
 
+.PARAMETER FocusServer1
+    Limit output to scenarios present on the first server. Scenarios missing from Server[0] are ignored entirely.
+
 .PARAMETER ResetCredentials
     Discard cached credentials and prompt for new ones.
 
@@ -61,6 +64,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$OnlyDifferences,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$FocusServer1,
 
     [Parameter(Mandatory=$false)]
     [switch]$ResetCredentials,
@@ -188,7 +194,7 @@ function Get-LandscapeEntryProperties {
         $EntryObj
     )
 
-    $scenarioId = $ScenarioObj.id
+    $scenarioId = $ScenarioObj.scenarioID
 
     if ($EntryObj.reference -match '\}(\d+)$') {
         $refId = $Matches[1]
@@ -197,7 +203,7 @@ function Get-LandscapeEntryProperties {
     }
 
     $propsUrl  = "$($BaseUrl)/OrchDyn/landscape/properties/$($scenarioId)/$($refId)"
-    $rawProps   = @(Invoke-OrchApi -Url $propsUrl -Credential $Credential)
+    $rawProps   = Invoke-OrchApi -Url $propsUrl -Credential $Credential
 
     $entryTypeName = [string]$EntryObj.entryTypeName
     $isDbConn      = $entryTypeName -eq 'database connection'
@@ -290,7 +296,7 @@ $scenariosByServer = @{}
 
 foreach ($srv in $Server) {
     $url = "$($baseUrlMap[$srv])/OrchDyn/deployment/scenarioInfos"
-    $raw = @(Invoke-OrchApi -Url $url -Credential $credentialMap[$srv])
+    $raw = Invoke-OrchApi -Url $url -Credential $credentialMap[$srv]
 
     foreach ($s in $raw) {
         $s | Add-Member -MemberType NoteProperty -Name 'name' -Value (Invoke-TranslateScenarioName ([string]$s.name)) -Force
@@ -308,6 +314,11 @@ $allScenarioNames = @(
     Select-Object -Unique |
     Sort-Object
 )
+
+if ($FocusServer1) {
+    $server1Names = @($scenariosByServer[$Server[0]] | ForEach-Object { $_.name })
+    $allScenarioNames = @($allScenarioNames | Where-Object { $server1Names -contains $_ })
+}
 
 if ($allScenarioNames.Count -eq 0) {
     Write-Host "No scenarios found matching '$($ScenarioName)'"
@@ -453,8 +464,8 @@ elseif ($Mode -eq 'Landscape') {
                 Select-Object -First 1
             if ($null -eq $scenario) { continue }
 
-            $infosUrl   = "$($baseUrlMap[$srv])/OrchDyn/landscape/infos/$($scenario.id)"
-            $rawEntries = @(Invoke-OrchApi -Url $infosUrl -Credential $credentialMap[$srv])
+            $infosUrl   = "$($baseUrlMap[$srv])/OrchDyn/landscape/infos/$($scenario.scenarioID)"
+            $rawEntries = Invoke-OrchApi -Url $infosUrl -Credential $credentialMap[$srv]
 
             $landscapeData[$srv][$sName] = @{}
 
@@ -497,6 +508,15 @@ elseif ($Mode -eq 'Landscape') {
         }
     }
     $valueWidth = $maxValueLen + 20
+
+    if ($Host) {
+        $maxLengthDueToScreen = [int](($Host.UI.RawUI.WindowSize.Width - 60)/$Server.Count)-2
+        if ($valueWidth -gt $maxLengthDueToScreen) {$valueWidth=$maxLengthDueToScreen}
+    }
+    else {
+        if ($valueWidth -gt 40) {$valueWidth=40}
+    }
+    
 
     # ── Build show-entry sets (applying OnlyDifferences) ────────────────────────
     $showEntries = @{}
