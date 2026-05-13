@@ -288,24 +288,26 @@ $lines = New-Object System.Collections.Generic.List[string]
 
 if ($Mode -eq 'Landscape') {
     $keys = @('VALUE','TYPE','URL','User','Proxy','Server','Database')
-    $landscapeKeys = $allServerData.Values | ForEach-Object { $_ | ForEach-Object { "$($_.DisplayScenarioName)|$($_.ScenarioName)|$($_.EntryTypeName)|$($_.EntryName)" } } | Sort-Object -Unique
+    $landscapeKeys = $allServerData.Values | ForEach-Object { $_ | ForEach-Object { "$($_.DisplayScenarioName)|$($_.EntryTypeName)|$($_.EntryName)" } } | Sort-Object -Unique
     $header = "{0,-49} {1,-2} {2,-34} {3,-14}" -f 'Scenario','T','Name','Value-Type'
     foreach ($srv in $Server) { $header += ("  {0,-52}" -f (Get-ShortServerName -ServerName $srv)) }
     if ($OutputDirectory) { $lines.Add($header) | Out-Null } else { Write-Host $header }
     foreach ($lk in $landscapeKeys) {
-        $scenarioLabel,$scenarioNameKey,$entryTypeName,$entryName = $lk -split '\|',4
-        $scenarioOutputLabel = if ($scenarioLabel -eq $scenarioNameKey) { $scenarioLabel } else { "$($scenarioLabel) <$($scenarioNameKey)>" }
+        $scenarioLabel,$entryTypeName,$entryName = $lk -split '\|',4
+        $scenarioOutputLabel = $scenarioLabel
         $allRowsForKey = @()
         foreach ($srv in $Server) {
-            $allRowsForKey += @($allServerData[$srv] | Where-Object { $_.DisplayScenarioName -eq $scenarioLabel -and $_.ScenarioName -eq $scenarioNameKey -and $_.EntryTypeName -eq $entryTypeName -and $_.EntryName -eq $entryName } | Select-Object -First 1)
+            $element = $allServerData[$srv] | Where-Object { $_.DisplayScenarioName -eq $scenarioLabel -and $_.EntryTypeName -eq $entryTypeName -and $_.EntryName -eq $entryName } | Select-Object -First 1
+            if (-not $element) { $element = @{} }
+            $allRowsForKey += $element
         }
-        $icon = (($allRowsForKey | Where-Object { $_ } | Select-Object -First 1).TypeIcon)
+        $icon = (($allRowsForKey | Where-Object { $_.DbVirtual } | Select-Object -First 1).TypeIcon)
         foreach ($valueType in $keys) {
             $valuesByServer = @{}
             for ($idx = 0; $idx -lt $Server.Count; $idx++) {
                 $serverName = $Server[$idx]
                 $row = $allRowsForKey[$idx]
-                if (-not $row) {
+                if (-not $row -or -not $row.DbVirtual) {
                     $valuesByServer[$serverName] = $null
                     continue
                 }
@@ -330,7 +332,7 @@ if ($Mode -eq 'Landscape') {
                 if (-not $showUrl) { continue }
             }
             $existingValues = @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-            $hasMissingValue = ($values | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0
+            $hasMissingValue = $existingValues.Count -ne $Server.Count
             if ($existingValues.Count -eq 0) { continue }
             $allEqual = (($values | Select-Object -Unique).Count -eq 1) -and -not $hasMissingValue
             if ($OnlyDifferences) {
