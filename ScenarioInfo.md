@@ -211,13 +211,19 @@ When the current commit is not directly tagged, the status column shows the most
 For grouping stability, the script supports a settings file with `regex;replacement` normalization rules that are applied before aggregation.
 The summary output tracks first/last occurrence, count, severity, flattened statement text, and the first stacktrace line.
 
+## Deployment status overview notes
+
+`Get-DeploymentInfo` derives scenario state indicators from `active` and `persistentSubcription` values (with `serviceState` fallback for older responses) and keeps version comparison coloring limited to the displayed version numbers. `OnlyDifferences` now also keeps rows where a scenario is missing on one or more compared servers. Version output now keeps fixed-width alignment while replacing numeric leading zeros with spaces.
+Landscape mode now materializes per-server landscape rows as a plain object array before storing them in the server map to avoid type-mismatch assignment errors during landscape comparisons.
+Landscape comparison output now preserves full server aliases in column headers (including dashes) and keeps placeholder columns visible when scenarios or values are missing on some servers.
+
 ## HL7 message send notes
 
 `Send-HL7Message` sends HL7 payloads via MLLP using `-Protocol Tcp`, `-Protocol Tls`, or `-Protocol TlsWithCertificate` with configurable wire encoding. It supports file-based input (`-Path`) and dynamic request creation (`-Message A19` plus `-AID`, optional `-Sender`), prints the outbound request in color, and can continue despite TLS certificate policy errors when `-IgnoreTlsError` is used (warnings are still written). Replies are extracted from MLLP framing and either printed with colorized HL7 separators (`|`, `^`, `~`, `\`, `&`) or saved as UTF-8 via `-ResponsePath`; if no response arrives, the script now emits an explicit error with protocol guidance.
 
 ## Elastic resend operation notes
 
-`Resend-FromElastic` supports operational SUBFL replay workflows by querying Elasticsearch with stage/category/MSGID filters, keeping only the oldest hit per BusinessCaseId/MSGID, and replaying payloads in batch, all-at-once, or interactive single-step mode with keyboard controls (P/R/S/X) shown in the processing progress bar while records are running. It can perform dry-run validation via `Action Test`, write per-record curl POST commands via `Mode Curl` (output file in `OutputDirectory`, no curl line console echo), writes timestamped success/error logs, reads resend endpoint definitions from `targets.csv`, tab-completes `Target` values from CSV `Name` entries, and can emit SourceInfo subscription filters through `TargetParty` and `TargetSubId`. Optional `Replacements` pairs allow regex-based search/replace updates on `MessageData1` and outgoing business-key values before replay. Multi-value filter parameters also normalize comma-separated input into distinct values so array filters apply as Elasticsearch OR terms. The script now initializes `System.Xml.Linq` explicitly so envelope cleanup remains available in hosts where the assembly is not preloaded.
+`Resend-FromElastic` supports operational SUBFL replay workflows by querying Elasticsearch with stage/category/MSGID filters, keeping only the oldest hit per BusinessCaseId/MSGID, and replaying payloads in batch, all-at-once, or interactive single-step mode with keyboard controls (P/R/S/X) shown in the processing progress bar while records are running. It can perform dry-run validation via `Action Test`, write per-record curl POST commands via `Mode Curl` (output file in `OutputDirectory`, no curl line console echo), writes timestamped success/error logs, reads resend endpoint definitions from `targets.csv`, tab-completes `Target` values from CSV `Name` entries, and can emit SourceInfo subscription filters through `TargetParty` and `TargetSubId`. Optional `Replacements` pairs allow regex-based search/replace updates on `MessageData1` and outgoing business-key values before replay. Multi-value filter parameters also normalize comma-separated input into distinct values so array filters apply as Elasticsearch OR terms. The script now initializes `System.Xml.Linq` explicitly so envelope cleanup remains available in hosts where the assembly is not preloaded. Running the script without explicit parameters now prints the detailed help page and exits without executing a query. Execution with parameters still requires at least one explicit business/date filter argument (for example StartDate/EndDate, ScenarioName, ProcessName, CaseNo, PatientId, SubId, MSGID/BusinessCaseId, Stage, Category, Subcategory, HcmMsgEvent); `Instance`, `Environment`, or `WorkflowPattern` alone are rejected and the script help is shown.
 
 
 ## Cato unit extraction notes
@@ -226,8 +232,14 @@ The summary output tracks first/last occurrence, count, severity, flattened stat
 
 ## PatAuskunft helper script note
 
-`Call-PatAuskunft` sends SOAP `GetData` requests to PatAuskunft and decodes the embedded XML response payload for console inspection. It supports environment-based endpoint selection and stores credentials in a user-scoped CLIXML file beside the script.
+`Call-PatAuskunft` sends SOAP `GetData` requests to PatAuskunft and decodes the embedded XML response payload for console inspection. It supports environment-based endpoint selection, stores credentials in a user-scoped CLIXML file beside the script, allows all currently documented result names as parameter input, and defaults `Resultfilter` to the highest available version per selected result unless explicitly provided.
 
 ## PatAuskunft helper notes
 
 `Call-PatAuskunft` prints decoded SOAP result XML with colorized output in the console to make element tags, attribute names/values, text nodes, and namespace prefixes easier to distinguish during manual checks.
+
+## Deployment info script notes
+
+`Get-DeploymentInfo` supports `Mode Version` for side-by-side scenario version checks and `Mode Landscape` for side-by-side landscape value checks (`VALUE`, `TYPE`, `URL`, `User`, `Proxy`, plus derived database `Server` and `Database`). Landscape mode supports `LandscapeName` filtering, `LandscapeIgnoreList` exclusion (default `ee_orch_instance`), fixed-width type tags (`GV`, `DB`, `UL`) for stable alignment, and `OnlyDifferences` behavior that compares only derived database server/database fields. The new `IncludeDBUrl` parameter (`SingleServer` default, `Always`, `Never`) controls whether full JDBC `URL` values are shown while still keeping derived `Server` and `Database` rows visible.
+
+`Get-DeploymentInfo` landscape keying now includes `EntryTypeName` in addition to scenario and entry name so missing rows on one server no longer shift values into a wrong column. Entry type icons also include `Proxy server -> PR` and `SAP client connection -> SA`. The new optional `-AutoRename` parameter (plus compatibility alias `-Autorename`) normalizes scenario names for alignment by replacing `WIGEV_SUBFL` with `ITI_SUBFL` and removing `_v01`.

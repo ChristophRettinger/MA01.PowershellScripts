@@ -19,6 +19,22 @@
     When multiple records share the same BusinessCaseId/MSGID, only the oldest
     record (lowest @timestamp) is kept for processing.
 
+.EXAMPLE
+    .\Resend-FromElastic.ps1 -Action Query -BusinessCaseId 021000005865627450708147
+    Gets information for a single BusinessCaseId/MSGID. If a result is found, it can be sent later.
+
+.EXAMPLE
+    .\Resend-FromElastic.ps1 -StartDate "2026-05-01 00:00:00" -EndDate "2026-05-21 00:00:00" -ScenarioName *3287 -WorkflowPattern ERROR
+    Searches for errors of a specific scenario in a given time range.
+
+.EXAMPLE
+    .\Resend-FromElastic.ps1 -Action Send -Target prod01-wsk -BusinessCaseId 011000014048434700509727,011000014048382560508756 -TargetSubId 123
+    Sends two specific records to prod01-wsk, but only to subscription 123 (when it is resolved).
+
+.EXAMPLE
+    .\Resend-FromElastic.ps1 -Action Send -Target prod01-wsk -CaseNo "92134461    26080726" -ScenarioName *HCM_empfangen* -ProcessState Test -Mode Curl -OutputDirectory output
+    Creates a text file with curl statements for prod01-wsk. Received HCM messages are replayed with ProcessState set to Test.
+
 .PARAMETER StartDate
     Inclusive start timestamp for Elasticsearch filtering (interpreted as local time unless explicitly marked as UTC). Defaults to now minus 7 days.
 
@@ -35,7 +51,7 @@
     File path containing the Elasticsearch API key.
 
 .PARAMETER ScenarioName
-    ScenarioName wildcard filter. Defaults to '*SUBFL*'.
+    ScenarioName wildcard filter. Defaults to '*SUBFL*'. The default value only applies when no explicit filter argument was provided.
 
 .PARAMETER ProcessName
     ProcessName wildcard filter.
@@ -57,6 +73,7 @@
 
 .PARAMETER WorkflowPattern
     WorkflowPattern filter. Accepts literal values or wildcard expressions.
+    Note: WorkflowPattern alone does not satisfy the mandatory filter requirement.
 
 .PARAMETER ErrorOnly
     Convenience switch to filter WorkflowPattern to 'ERROR'. Cannot be combined with WorkflowPattern values other than 'ERROR'.
@@ -71,10 +88,11 @@
     BK._HCMMSGEVENT filter values.
 
 .PARAMETER Instance
-    Instance filter values.
+    Instance filter values. Instance alone does not satisfy the mandatory filter requirement.
 
 .PARAMETER Environment
     Environment filter values. Valid options: development, testing, staging, production.
+    Environment alone does not satisfy the mandatory filter requirement.
 
 .PARAMETER Action
     Query, Send, Test, or ShowQuery (prints the Elasticsearch request and exits). Defaults to Query.
@@ -101,7 +119,8 @@
     When set, clears _MSGID header.
 
 .PARAMETER ProcessState
-    Fallback ProcessState for SourceInfoMsg. Defaults to 'Original'.
+    ProcessState override for SourceInfoMsg when explicitly provided.
+    If omitted, ProcessState from SourceInfo is used when available; otherwise 'Original'.
 
 .PARAMETER OutputDirectory
     Optional output directory for logs.
@@ -479,7 +498,8 @@ function Get-SourceInfoXml {
         [object]$Source,
         [string]$SubscriptionFilterParty,
         [string]$SubscriptionFilterId,
-        [string]$ResolvedProcessState,
+        [string]$FallbackProcessState,
+        [bool]$UseProvidedProcessState = $false,
         [string]$TargetName
     )
 
@@ -519,7 +539,7 @@ function Get-SourceInfoXml {
         ''
     }
 
-    $processStateValue = if ($sourceInfo -and $sourceInfo.SourceInfo.ProcessState) { "$($sourceInfo.SourceInfo.ProcessState)" } else { $ResolvedProcessState }
+    $processStateValue = if ($UseProvidedProcessState) { $FallbackProcessState } elseif ($sourceInfo -and $sourceInfo.SourceInfo.ProcessState) { "$($sourceInfo.SourceInfo.ProcessState)" } else { $FallbackProcessState }
     $instanceValue = if ($TargetName) { $TargetName } elseif ($sourceInfo -and $sourceInfo.SourceInfo.Instance) { "$($sourceInfo.SourceInfo.Instance)" } else { '' }
 
     $doc = New-Object System.Xml.XmlDocument
@@ -743,8 +763,25 @@ foreach ($arr in @($CaseNo,$PatientId,$SubId,$BusinessCaseId,$Category,$Subcateg
 }
 if ($Stage) { $effectiveFilterCount++ }
 if (-not [string]::IsNullOrWhiteSpace($WorkflowPattern)) { $effectiveFilterCount++ }
-if ($effectiveFilterCount -eq 0) {
-    throw 'At least one filter parameter must be provided.'
+$helpScriptPath = if ([string]::IsNullOrWhiteSpace($PSCommandPath)) { $MyInvocation.MyCommand.Path } else { $PSCommandPath }
+
+$helpScriptPath
+if ($PSBoundParameters.Count -eq 0 -or $effectiveFilterCount -eq 0) {
+    Get-Help $helpScriptPath
+    return
+}
+
+$hasRequiredFilter = $false
+foreach ($requiredParameterName in @('StartDate','EndDate','ScenarioName','ProcessName','CaseNo','PatientId','SubId','BusinessCaseId','Stage','Category','Subcategory','HcmMsgEvent')) {
+    if ($PSBoundParameters.ContainsKey($requiredParameterName)) {
+        $hasRequiredFilter = $true
+        break
+    }
+}
+
+if (-not $hasRequiredFilter) {
+    Get-Help $helpScriptPath -Detailed
+    throw 'At least one filter argument is required (for example StartDate/EndDate, ScenarioName, ProcessName, CaseNo, PatientId, SubId, MSGID/BusinessCaseId, Stage, Category, Subcategory, or HcmMsgEvent). Instance, Environment, and WorkflowPattern are not sufficient by themselves.'
 }
 
 if ($Mode -eq 'Curl') {
@@ -1000,7 +1037,7 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     }
 
     $headersOut = @{
-        'SourceInfoMsg' = (Get-SourceInfoXml -Source $current -SubscriptionFilterParty $TargetParty -SubscriptionFilterId $TargetSubId -ResolvedProcessState $ProcessState -TargetName $Target)
+        'SourceInfoMsg' = (Get-SourceInfoXml -Source $current -SubscriptionFilterParty $TargetParty -SubscriptionFilterId $TargetSubId -FallbackProcessState $(if ($PSBoundParameters.ContainsKey('ProcessState')) { $ProcessState } else { 'Original' }) -UseProvidedProcessState $PSBoundParameters.ContainsKey('ProcessState') -TargetName $Target)
         'SUBFL_source_host' = 'ElasticReinject'
         'BuKeysString' = (ConvertTo-BusinessKeysString -Source $current -ReplacementPairs $ReplacementPairs)
         '_MSGID' = $(if ($NewBusinessCaseIds.IsPresent) { '' } else { $msgId })
