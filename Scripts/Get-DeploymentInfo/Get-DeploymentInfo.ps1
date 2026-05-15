@@ -165,11 +165,11 @@ function Get-CompareColor {
 function Get-EntryTypeIcon {
     param([string]$EntryTypeName)
     switch ($EntryTypeName) {
-        'Global variable'          { return '[G]' }
-        'database connection'      { return '[D]' }
-        'Uniform resource locator' { return '[U]' }
-        'Proxy server'             { return '[P]' }
-        'SAP client connection'    { return '[S]' }
+        'Global variable'          { return 'VAR' }
+        'database connection'      { return 'DB ' }
+        'Uniform resource locator' { return 'URL' }
+        'Proxy server'             { return 'PRX' }
+        'SAP client connection'    { return 'SAP' }
         default                    { return '[?]' }
     }
 }
@@ -510,7 +510,7 @@ elseif ($Mode -eq 'Landscape') {
     $valueWidth = $maxValueLen + 20
 
     if ($Host) {
-        $maxLengthDueToScreen = [int](($Host.UI.RawUI.WindowSize.Width - 60)/$Server.Count)-2
+        $maxLengthDueToScreen = [int](($Host.UI.RawUI.WindowSize.Width - 60)/$Server.Count)-3
         if ($valueWidth -gt $maxLengthDueToScreen) {$valueWidth=$maxLengthDueToScreen}
     }
     else {
@@ -576,6 +576,7 @@ elseif ($Mode -eq 'Landscape') {
 
     # ── Render ───────────────────────────────────────────────────────────────────
 
+    $firstSceanario = $true
     foreach ($sName in $allScenarioNames) {
         $entriesToShow = $showEntries[$sName]
         if ($entriesToShow.Count -eq 0) { continue }
@@ -605,7 +606,7 @@ elseif ($Mode -eq 'Landscape') {
             foreach ($srv in $Server) {
                 $headerLine += ("{0,-$valueWidth}" -f $srv) + "  "
             }
-            Write-Host $headerLine
+            if ($firstSceanario) { Write-Host $headerLine }
             Write-PlainText $headerLine
 
             foreach ($entryName in $entriesToShow) {
@@ -641,7 +642,7 @@ elseif ($Mode -eq 'Landscape') {
                         }
                     }
 
-                    $presentVals  = @($Server | Where-Object { $null -ne $perServerValues[$_] } | ForEach-Object { $perServerValues[$_] })
+                    $presentVals  = @($Server | Where-Object { $null -ne $perServerValues[$_] -and "" -ne $perServerValues[$_]  } | ForEach-Object { $perServerValues[$_] })
                     $allSameValue = ($presentVals | Select-Object -Unique).Count -le 1
 
                     $leftPart = "  $($icon) $("{0,-40}" -f $entryName)  $("{0,-10}" -f $propName)  "
@@ -650,11 +651,13 @@ elseif ($Mode -eq 'Landscape') {
 
                     foreach ($srv in $Server) {
                         $val = $perServerValues[$srv]
+
                         if ($null -eq $val) {
                             $col = ("{0,-$valueWidth}" -f '-') + "  "
                             Write-Host $col -NoNewline -ForegroundColor DarkGray
                             $plainLine += $col
                         } else {
+                            $val = if ($val.Length -gt $valueWidth) { $val.Substring(0,$valueWidth-1) + "…" } else { $val }
                             $color = if ($allSameValue) { 'White' } else { 'Yellow' }
                             $col   = ("{0,-$valueWidth}" -f $val) + "  "
                             Write-Host $col -NoNewline -ForegroundColor $color
@@ -667,6 +670,8 @@ elseif ($Mode -eq 'Landscape') {
                 }
             }
         }
+
+        $firstSceanario = $false
     }
 }
 
