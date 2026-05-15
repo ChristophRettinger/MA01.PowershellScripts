@@ -2,3 +2,4 @@
 *.config.json
 *.clixml
 **/Output
+**/.vscode
