@@ -9,7 +9,7 @@
     Action modes:
     - Query: only reports counts and timestamp ranges grouped by ScenarioName.
     - Test: performs full resend preparation but skips HTTP transmission.
-    - Send: posts MessageData1 to a target endpoint from targets.csv.
+    - Send: posts MessageData1 to a target endpoint from ServerConfig.psd1.
     - Curl: writes one curl command per prepared resend record to an output file.
 
     For resend actions, the script builds SourceInfoMsg and BuKeysString headers,
@@ -44,11 +44,8 @@
 .PARAMETER ElasticUrl
     Elasticsearch _search endpoint URL.
 
-.PARAMETER ElasticApiKey
-    Elasticsearch API key value.
-
-.PARAMETER ElasticApiKeyPath
-    File path containing the Elasticsearch API key.
+.PARAMETER ResetCredentials
+    Discard the saved Elasticsearch credential and prompt for a new API key.
 
 .PARAMETER ScenarioName
     ScenarioName wildcard filter. Defaults to '*SUBFL*'. The default value only applies when no explicit filter argument was provided.
@@ -98,7 +95,7 @@
     Query, Send, Test, or ShowQuery (prints the Elasticsearch request and exits). Defaults to Query.
 
 .PARAMETER Target
-    Target name resolved from targets.csv (columns Name,URL); supports tab completion from Name values.
+    Target name resolved from ServerConfig.psd1 (OrchestraTargets); supports tab completion from configured server names.
 
 .PARAMETER BatchSize
     Number of records processed per batch. Defaults to 100.
@@ -145,13 +142,10 @@ param(
     [datetime]$EndDate = (Get-Date),
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
+    [string]$ElasticUrl = '',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKey,
-
-    [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath = (Join-Path -Path $PSScriptRoot -ChildPath 'elastic.key'),
+    [switch]$ResetCredentials,
 
     [Parameter(Mandatory=$false)]
     [string]$ScenarioName = '*SUBFL*',
@@ -205,19 +199,18 @@ param(
     [ArgumentCompleter({
         param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
 
-        $targetsPath = Join-Path -Path $PSScriptRoot -ChildPath 'targets.csv'
-        if (-not (Test-Path -Path $targetsPath)) {
-            return
-        }
+        $sharedDir = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
+        $serverConfigPath = Join-Path -Path $sharedDir -ChildPath 'ServerConfig.ps1'
+        if (-not (Test-Path -Path $serverConfigPath)) { return }
+        . $serverConfigPath
+        $cfg = Get-ServerConfig
 
-        Import-Csv -Path $targetsPath |
-            Where-Object {
-                -not [string]::IsNullOrWhiteSpace($_.Name) -and
-                $_.Name -like "${wordToComplete}*"
-            } |
-            Select-Object -ExpandProperty Name -Unique |
+        $cfg.OrchestraTargets.Keys |
+            Where-Object { $_ -like "${wordToComplete}*" } |
+            Sort-Object |
             ForEach-Object {
-                [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+                $env = $cfg.OrchestraTargets[$_].Environment
+                [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', "$_ ($($env))")
             }
     })]
     [Parameter(Mandatory=$false)]
@@ -261,6 +254,7 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
     throw "Shared Elastic helper not found at '$sharedHelpersPath'."
 }
 . $sharedHelpersPath
+. (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
 function Initialize-SystemXmlLinq {
     if ($null -ne ([type]::GetType('System.Xml.Linq.XDocument, System.Xml.Linq', $false))) {
@@ -337,7 +331,7 @@ function Write-RunLog {
 
     Write-Host $line -ForegroundColor $levelColor
     if ($script:LogFilePath) {
-        Add-Content -Path $script:LogFilePath -Value $line
+        Add-Content -Path $script:LogFilePath -Value $line -Encoding UTF8
     }
 }
 
@@ -380,7 +374,7 @@ function ConvertTo-ElasticTermsFilter {
     return @{ terms = @{ $Field = $items } }
 }
 
-function Normalize-FilterValues {
+function Format-FilterValues {
     param(
         [string[]]$Values
     )
@@ -440,17 +434,6 @@ function Resolve-RawBusinessCaseIdsFromInvocation ($MyInvocation) {
     return @($rawItems)
 }
 
-function Resolve-ApiKey {
-    if ($ElasticApiKey) {
-        return $ElasticApiKey.Trim()
-    }
-
-    if ($ElasticApiKeyPath -and (Test-Path -Path $ElasticApiKeyPath)) {
-        return (Get-Content -Path $ElasticApiKeyPath -Raw).Trim()
-    }
-
-    throw 'No Elasticsearch API key provided. Use ElasticApiKey or ElasticApiKeyPath.'
-}
 
 function Get-RecordBusinessCaseKey {
     param(
@@ -474,23 +457,17 @@ function Get-RecordBusinessCaseKey {
 function Resolve-TargetDefinition {
     param([string]$TargetName)
 
-    $targetsPath = Join-Path -Path $PSScriptRoot -ChildPath 'targets.csv'
-    if (-not (Test-Path -Path $targetsPath)) {
-        throw "Target file not found: $targetsPath"
+    $cfg = Get-ServerConfig
+    $entry = $cfg.OrchestraTargets[$TargetName]
+    if (-not $entry) {
+        throw "Target '$TargetName' not found in ServerConfig.psd1 (OrchestraTargets)"
     }
 
-    $targets = Import-Csv -Path $targetsPath
-    $match = $targets | Where-Object { $_.Name -eq $TargetName } | Select-Object -First 1
-    if (-not $match) {
-        throw "Target '$TargetName' not found in $targetsPath"
+    if ([string]::IsNullOrWhiteSpace($entry.BaseUrl)) {
+        throw "Target '$TargetName' has no BaseUrl in ServerConfig.psd1."
     }
 
-    if ([string]::IsNullOrWhiteSpace($match.URL)) {
-        throw "Target '$TargetName' has no URL value."
-    }
-
-    $url = $match.URL.Trim()
-    return $url
+    return "$($entry.BaseUrl)$($cfg.OrchestraReinjectPath)"
 }
 
 function Get-SourceInfoXml {
@@ -598,7 +575,7 @@ function ConvertTo-BusinessKeysString {
         if ($excludedKeys -contains $prop.Name) { continue }
 
         $value = if ($null -eq $prop.Value) { '' } else { "$($prop.Value)" }
-        $value = Apply-RegexReplacements -InputText $value -ReplacementPairs $ReplacementPairs
+        $value = Invoke-RegexReplacements -InputText $value -ReplacementPairs $ReplacementPairs
         $parts.Add("$($prop.Name):$value") | Out-Null
     }
 
@@ -607,7 +584,7 @@ function ConvertTo-BusinessKeysString {
     return [System.Net.WebUtility]::UrlEncode($base64)
 }
 
-function Cleanup-EnvelopeData {
+function Clear-EnvelopeData {
     param([string]$XmlText)
 
     if ([string]::IsNullOrWhiteSpace($XmlText)) {
@@ -692,7 +669,7 @@ function ConvertTo-ReplacementPairs {
     return @($pairs)
 }
 
-function Apply-RegexReplacements {
+function Invoke-RegexReplacements {
     param(
         [AllowNull()][string]$InputText,
         [object[]]$ReplacementPairs
@@ -740,19 +717,19 @@ if ($BusinessCaseId -and -not $PSBoundParameters.ContainsKey('Stage')) {
     $Stage = 'Input'
 }
 
-$CaseNo = Normalize-FilterValues -Values $CaseNo
-$PatientId = Normalize-FilterValues -Values $PatientId
-$SubId = Normalize-FilterValues -Values $SubId
-$BusinessCaseId = Normalize-FilterValues -Values $BusinessCaseId
+$CaseNo = Format-FilterValues -Values $CaseNo
+$PatientId = Format-FilterValues -Values $PatientId
+$SubId = Format-FilterValues -Values $SubId
+$BusinessCaseId = Format-FilterValues -Values $BusinessCaseId
 $rawBusinessCaseIds = Resolve-RawBusinessCaseIdsFromInvocation $MyInvocation
 if ($rawBusinessCaseIds.Count -gt 0 -and $rawBusinessCaseIds.Count -eq $BusinessCaseId.Count) {
-    $BusinessCaseId = Normalize-FilterValues -Values $rawBusinessCaseIds
+    $BusinessCaseId = Format-FilterValues -Values $rawBusinessCaseIds
 }
-$Category = Normalize-FilterValues -Values $Category
-$Subcategory = Normalize-FilterValues -Values $Subcategory
-$HcmMsgEvent = Normalize-FilterValues -Values $HcmMsgEvent
-$Instance = Normalize-FilterValues -Values $Instance
-$EnvironmentFilters = Normalize-FilterValues -Values $Environment
+$Category = Format-FilterValues -Values $Category
+$Subcategory = Format-FilterValues -Values $Subcategory
+$HcmMsgEvent = Format-FilterValues -Values $HcmMsgEvent
+$Instance = Format-FilterValues -Values $Instance
+$EnvironmentFilters = Format-FilterValues -Values $Environment
 $ReplacementPairs = ConvertTo-ReplacementPairs -Values $Replacements
 
 $effectiveFilterCount = 0
@@ -814,7 +791,13 @@ if (($Action -eq 'Send' -or $Action -eq 'Test') -and [string]::IsNullOrWhiteSpac
     throw 'Target is required for Action Send or Test.'
 }
 
-$headers = @{ 'Content-Type' = 'application/json'; 'Authorization' = "ApiKey $(Resolve-ApiKey)" }
+if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
+    $ElasticUrl = (Get-ServerConfig).Elasticsearch.OrchestraSearchUrl
+}
+
+$credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
+$elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
+$headers = @{ 'Content-Type' = 'application/json'; 'Authorization' = "ApiKey $($elasticCred.GetNetworkCredential().Password)" }
 
 $timestampRange = @{ gte = $startWindow.UtcIso; lte = $endWindow.UtcIso }
 
@@ -1026,9 +1009,9 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     if ($stopRequested) { break }
 
     $messageData1 = "$(Get-ElasticSourceValue -Source $current -FieldPath 'MessageData1')"
-    $messageData1 = Apply-RegexReplacements -InputText $messageData1 -ReplacementPairs $ReplacementPairs
+    $messageData1 = Invoke-RegexReplacements -InputText $messageData1 -ReplacementPairs $ReplacementPairs
     if ($CleanupEnvelope) {
-        $messageData1 = Cleanup-EnvelopeData -XmlText $messageData1
+        $messageData1 = Clear-EnvelopeData -XmlText $messageData1
     }
 
     $msgId = "$(Get-ElasticSourceValue -Source $current -FieldPath 'MSGID')"
@@ -1051,12 +1034,12 @@ for ($i = 0; $i -lt $records.Count; $i++) {
     try {
         if ($Mode -eq 'Curl') {
             $curlCommand = ConvertTo-CurlCommand -Uri $targetUri -Headers $headersOut -Body $messageData1
-            Add-Content -Path $script:CurlOutputFilePath -Value $curlCommand
+            Add-Content -Path $script:CurlOutputFilePath -Value $curlCommand -Encoding UTF8
 
             $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff') | CURL  | #$indexDisplay | $msgId | $scenario | TS $recordStamp"
             $script:SuccessLog.Add($line) | Out-Null
             if ($script:LogFilePath) {
-                Add-Content -Path $script:LogFilePath -Value $line
+                Add-Content -Path $script:LogFilePath -Value $line -Encoding UTF8
             }
         } elseif ($Action -eq 'Send') {
             Invoke-RestMethod -Method Post -Uri $targetUri -Headers $headersOut -Body $messageData1 -ContentType 'text/xml; charset=utf-8' -TimeoutSec 120 | Out-Null
@@ -1146,7 +1129,7 @@ Write-Host ", " -ForegroundColor Gray -NoNewline
 Write-Host "Errors: $errorCount" -ForegroundColor $(if ($errorCount -gt 0) { 'Red' } else { 'Gray' }) -NoNewline
 Write-Host "." -ForegroundColor Gray
 if ($script:LogFilePath) {
-    Add-Content -Path $script:LogFilePath -Value "[$stamp] [INFO] Finished. Successes: $successCount, Errors: $errorCount."
+    Add-Content -Path $script:LogFilePath -Value "[$stamp] [INFO] Finished. Successes: $successCount, Errors: $errorCount." -Encoding UTF8
 }
 if ($Mode -eq 'Curl' -and $script:CurlOutputFilePath) {
     Write-RunLog -Level 'INFO' -Message "Curl commands written to '$script:CurlOutputFilePath'."

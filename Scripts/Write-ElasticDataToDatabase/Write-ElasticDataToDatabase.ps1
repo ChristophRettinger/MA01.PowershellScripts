@@ -24,19 +24,16 @@
     ScenarioName wildcard filter. Defaults to *SUBFL*.
 
 .PARAMETER Database
-    SQL Server target database name. Defaults to ElasticData.
+    SQL Server target database name. Defaults to ServerConfig.psd1 (SqlServer.ElasticData.Database).
 
 .PARAMETER Server
-    SQL Server target server name. Defaults to evolux.wienkav.at.
+    SQL Server target server name. Defaults to ServerConfig.psd1 (SqlServer.ElasticData.Connection).
 
 .PARAMETER ElasticUrl
     Elasticsearch _search URL.
 
-.PARAMETER ElasticApiKey
-    Optional Elasticsearch API key.
-
-.PARAMETER ElasticApiKeyPath
-    Optional path to a file containing the Elasticsearch API key.
+.PARAMETER ResetCredentials
+    Discard the saved Elasticsearch credential and prompt for a new API key.
 
 .EXAMPLE
     ./Write-ElasticDataToDatabase.ps1 -StartDate (Get-Date).Date -EndDate (Get-Date)
@@ -55,19 +52,16 @@ param(
     [string]$ScenarioName = '*SUBFL*',
 
     [Parameter(Mandatory=$false)]
-    [string]$Database = 'ElasticData',
+    [string]$Database = '',
 
     [Parameter(Mandatory=$false)]
-    [string]$Server = 'evolux.wienkav.at',
+    [string]$Server = '',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
+    [string]$ElasticUrl = '',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKey,
-
-    [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath = (Join-Path -Path $PSScriptRoot -ChildPath 'elastic.key')
+    [switch]$ResetCredentials
 )
 
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
@@ -76,6 +70,7 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
     throw "Shared Elastic helper not found at '$sharedHelpersPath'."
 }
 . $sharedHelpersPath
+. (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
 function ConvertTo-StringValue {
     param([object]$Value)
@@ -116,15 +111,20 @@ function ConvertTo-SubIdListXml {
     return $xmlBuilder.ToString()
 }
 
-$headers = @{}
-if (-not [string]::IsNullOrWhiteSpace($ElasticApiKey)) {
-    $headers['Authorization'] = "ApiKey $ElasticApiKey"
-} elseif ($ElasticApiKeyPath -and (Test-Path -Path $ElasticApiKeyPath)) {
-    $apiKeyFromFile = (Get-Content -Path $ElasticApiKeyPath -Raw).Trim()
-    if (-not [string]::IsNullOrWhiteSpace($apiKeyFromFile)) {
-        $headers['Authorization'] = "ApiKey $apiKeyFromFile"
-    }
+$_cfg = Get-ServerConfig
+if ([string]::IsNullOrWhiteSpace($Server)) {
+    $Server = $_cfg.SqlServer.ElasticData.Connection
 }
+if ([string]::IsNullOrWhiteSpace($Database)) {
+    $Database = $_cfg.SqlServer.ElasticData.Database
+}
+if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
+    $ElasticUrl = $_cfg.Elasticsearch.OrchestraSearchUrl
+}
+
+$credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
+$elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
+$headers = @{ 'Authorization' = "ApiKey $($elasticCred.GetNetworkCredential().Password)" }
 
 $filters = @(
     @{ range = @{ '@timestamp' = @{ gte = $StartDate.ToString('o'); lte = $EndDate.ToString('o') } } },

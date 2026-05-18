@@ -45,11 +45,8 @@
     Full Elasticsearch _search URL (including index pattern). Defaults to
     `https://es-obs.apps.zeus.wien.at/logs-subscriptionflow.journals*/_search`.
 
-.PARAMETER ElasticApiKey
-    Elasticsearch API key string. If omitted, ElasticApiKeyPath is used.
-
-.PARAMETER ElasticApiKeyPath
-    Path to a file containing the Elasticsearch API key. Defaults to `.\elastic.key`.
+.PARAMETER ResetCredentials
+    Discard the saved Elasticsearch credential and prompt for a new API key.
 
 .PARAMETER OutputDirectory
     Directory where a JSON export of the collected hits is written. Defaults to an
@@ -96,7 +93,7 @@
     ./Get-PatientInfo.ps1 -PIDISH 0000869517 -StartDate '2025-05-01' -EndDate '2025-05-07'
 
 .EXAMPLE
-    ./Get-PatientInfo.ps1 -CASENO 7622000264 -MOVENO 00042 -ElasticApiKeyPath ~/.eskey
+    ./Get-PatientInfo.ps1 -CASENO 7622000264 -MOVENO 00042
 #>
 
 param(
@@ -113,13 +110,10 @@ param(
     [string]$ElasticTimeField = '@timestamp',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
+    [string]$ElasticUrl = '',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKey,
-
-    [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath = (Join-Path -Path $PSScriptRoot -ChildPath 'elastic.key'),
+    [switch]$ResetCredentials,
 
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output'),
@@ -160,36 +154,7 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
     throw "Shared Elastic helper not found at '$sharedHelpersPath'."
 }
 . $sharedHelpersPath
-
-
-function Resolve-EffectiveTimespan {
-    param(
-        [object]$Value,
-        [int]$DefaultMinutes = 15
-    )
-
-    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace("$Value")) {
-        return [timespan]::FromMinutes($DefaultMinutes)
-    }
-
-    if ($Value -is [timespan]) { return $Value }
-    if ($Value -is [byte] -or $Value -is [int16] -or $Value -is [int32] -or $Value -is [int64] -or $Value -is [single] -or $Value -is [double] -or $Value -is [decimal]) {
-        return [timespan]::FromMinutes([double]$Value)
-    }
-
-    $minutes = 0.0
-    $textValue = "$Value".Trim()
-    if ([double]::TryParse($textValue, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$minutes)) {
-        return [timespan]::FromMinutes($minutes)
-    }
-
-    $parsedTimeSpan = [timespan]::Zero
-    if ([timespan]::TryParse($textValue, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedTimeSpan)) {
-        return $parsedTimeSpan
-    }
-
-    throw "Invalid Timespan '$Value'. Provide a number (minutes) or a TimeSpan value."
-}
+. (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
 $includeEndDate = $PSBoundParameters.ContainsKey('EndDate')
 if ($includeEndDate -and $PSBoundParameters.ContainsKey('Timespan')) {
@@ -459,19 +424,13 @@ if ($CASENO -and -not $caseField) {
 }
 $caseFilterValue = if ($CASENO) { $CASENO.Trim() } else { $null }
 
-$headers = @{ 'Content-Type' = 'application/json' }
-if ($PSBoundParameters.ContainsKey('ElasticApiKey') -and $ElasticApiKey) {
-    $headers['Authorization'] = "ApiKey $ElasticApiKey"
-} elseif ($ElasticApiKeyPath) {
-    if (Test-Path -Path $ElasticApiKeyPath) {
-        $key = Get-Content -Path $ElasticApiKeyPath -Raw
-        if (-not [string]::IsNullOrWhiteSpace($key)) {
-            $headers['Authorization'] = "ApiKey $($key.Trim())"
-        }
-    } else {
-        Write-Warning "ElasticApiKeyPath '$ElasticApiKeyPath' not found. Requests will be sent without authentication."
-    }
+if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
+    $ElasticUrl = (Get-ServerConfig).Elasticsearch.SubscriptionFlowSearchUrl
 }
+
+$credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
+$elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
+$headers = @{ 'Content-Type' = 'application/json'; 'Authorization' = "ApiKey $($elasticCred.GetNetworkCredential().Password)" }
 
 $baseMust = @(
     @{ term = @{ 'BK.SUBFL_messagetype' = 'HCM' } },
@@ -630,7 +589,7 @@ try {
     }
     $exportName = "PatientInfo_{0:yyyyMMdd_HHmmss}.json" -f (Get-Date)
     $exportPath = Join-Path -Path $OutputDirectory -ChildPath $exportName
-    $collectedHits.Values | ConvertTo-Json -Depth 15 | Set-Content -Path $exportPath
+    $collectedHits.Values | ConvertTo-Json -Depth 15 | Set-Content -Path $exportPath -Encoding UTF8
     Write-PatientOutput "Exported raw hits to $exportPath"
 } catch {
     Write-Warning "Failed to write export to $($OutputDirectory): $_"

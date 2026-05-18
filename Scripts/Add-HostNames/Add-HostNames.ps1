@@ -72,6 +72,6 @@ $enhanced = $data | ForEach-Object {
 }
 
 # Export the enriched table
-$enhanced | Export-Csv -Path $OutputCsv -NoTypeInformation
+$enhanced | Export-Csv -Path $OutputCsv -NoTypeInformation -Encoding UTF8
 
 Write-Host "Wrote enhanced CSV with column '$HostNameColumn' to `"$OutputCsv`""

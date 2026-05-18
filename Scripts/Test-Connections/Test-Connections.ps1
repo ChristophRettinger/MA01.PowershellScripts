@@ -140,7 +140,7 @@ foreach ($entry in $hosts) {
 # Export or report based on mode
 if (-not $TestOnly) {
     if ($changesMade) {
-        $hosts | Export-Csv -Path $csvFilePath -NoTypeInformation -Delimiter ";"
+        $hosts | Export-Csv -Path $csvFilePath -NoTypeInformation -Delimiter ";" -Encoding UTF8
         Write-Host "CSV file updated." -ForegroundColor Green
     } else {
         Write-Host "No changes were made to the CSV file." -ForegroundColor Yellow

@@ -52,11 +52,8 @@
 .PARAMETER ElasticUrl
     Full Elasticsearch _search URL. Defaults to the logs-orchestra.journals index pattern.
 
-.PARAMETER ElasticApiKey
-    Elasticsearch API key string. If omitted, ElasticApiKeyPath is used.
-
-.PARAMETER ElasticApiKeyPath
-    Path to a file containing the Elasticsearch API key. Defaults to '.\elastic.key'.
+.PARAMETER ResetCredentials
+    Discard the saved Elasticsearch credential and prompt for a new API key.
 
 .PARAMETER OutputDirectory
     Directory where result files are written for modes All or OneOfType. Defaults to
@@ -84,7 +81,7 @@
 
 .EXAMPLE
     ./Evaluate-OrchestraErrorsViaElastic.ps1 -ScenarioName MyScenario `
-        -Environment production -ElasticApiKeyPath ~/.eskey
+        -Environment production
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -107,13 +104,10 @@ param(
     [string]$Instance,
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
+    [string]$ElasticUrl = '',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKey,
-
-    [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath = (Join-Path -Path $PSScriptRoot -ChildPath 'elastic.key'),
+    [switch]$ResetCredentials,
 
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output'),
@@ -138,35 +132,7 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
     throw "Shared Elastic helper not found at '$sharedHelpersPath'."
 }
 . $sharedHelpersPath
-
-function Resolve-EffectiveTimespan {
-    param(
-        [object]$Value,
-        [int]$DefaultMinutes = 15
-    )
-
-    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace("$Value")) {
-        return [timespan]::FromMinutes($DefaultMinutes)
-    }
-
-    if ($Value -is [timespan]) { return $Value }
-    if ($Value -is [byte] -or $Value -is [int16] -or $Value -is [int32] -or $Value -is [int64] -or $Value -is [single] -or $Value -is [double] -or $Value -is [decimal]) {
-        return [timespan]::FromMinutes([double]$Value)
-    }
-
-    $minutes = 0.0
-    $textValue = "$Value".Trim()
-    if ([double]::TryParse($textValue, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$minutes)) {
-        return [timespan]::FromMinutes($minutes)
-    }
-
-    $parsedTimeSpan = [timespan]::Zero
-    if ([timespan]::TryParse($textValue, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedTimeSpan)) {
-        return $parsedTimeSpan
-    }
-
-    throw "Invalid Timespan '$Value'. Provide a number (minutes) or a TimeSpan value."
-}
+. (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
 # Determine default StartDate/EndDate
 $includeEnd = $PSBoundParameters.ContainsKey('EndDate')
@@ -184,14 +150,13 @@ if (-not $includeEnd) {
     $includeEnd = $true
 }
 
-# Build request headers with API key
-$headers = @{}
-if ($ElasticApiKey) {
-    $headers['Authorization'] = "ApiKey $ElasticApiKey"
-} elseif ($ElasticApiKeyPath -and (Test-Path $ElasticApiKeyPath)) {
-    $k = Get-Content -Path $ElasticApiKeyPath -Raw
-    $headers['Authorization'] = "ApiKey $k"
+if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
+    $ElasticUrl = (Get-ServerConfig).Elasticsearch.OrchestraSearchUrl
 }
+
+$credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
+$elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
+$headers = @{ 'Authorization' = "ApiKey $($elasticCred.GetNetworkCredential().Password)" }
 
 # Load regex replacements from configuration
 $replacements = @()

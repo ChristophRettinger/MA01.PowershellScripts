@@ -50,11 +50,8 @@
     Full Elasticsearch _search URL. Defaults to the logs-orchestra.journals
     index pattern.
 
-.PARAMETER ElasticApiKey
-    Elasticsearch API key string. If omitted, ElasticApiKeyPath is used.
-
-.PARAMETER ElasticApiKeyPath
-    Path to a file containing the Elasticsearch API key. Defaults to '.\elastic.key'.
+.PARAMETER ResetCredentials
+    Discard the saved Elasticsearch credential and prompt for a new API key.
 
 .PARAMETER OutputDirectory
     Directory where the CSV summary is written. Defaults to a folder named
@@ -66,7 +63,7 @@
 
 .EXAMPLE
     ./Evaluate-AdmKavideErrors.ps1 -StartDate (Get-Date).AddDays(-1) `
-        -Environment production -ElasticApiKeyPath ~/.eskey
+        -Environment production
 #>
 param(
     [Parameter(Mandatory=$false)]
@@ -86,13 +83,10 @@ param(
     [string]$Instance,
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
+    [string]$ElasticUrl = '',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKey,
-
-    [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath = (Join-Path -Path $PSScriptRoot -ChildPath 'elastic.key'),
+    [switch]$ResetCredentials,
 
     [Parameter(Mandatory=$false)]
     [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output'),
@@ -107,58 +101,7 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
     throw "Shared Elastic helper not found at '$sharedHelpersPath'."
 }
 . $sharedHelpersPath
-
-function Resolve-EffectiveTimespan {
-    param(
-        [object]$Value,
-        [int]$DefaultMinutes = 15
-    )
-
-    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace("$Value")) {
-        return [timespan]::FromMinutes($DefaultMinutes)
-    }
-
-    if ($Value -is [timespan]) { return $Value }
-    if ($Value -is [byte] -or $Value -is [int16] -or $Value -is [int32] -or $Value -is [int64] -or $Value -is [single] -or $Value -is [double] -or $Value -is [decimal]) {
-        return [timespan]::FromMinutes([double]$Value)
-    }
-
-    $minutes = 0.0
-    $textValue = "$Value".Trim()
-    if ([double]::TryParse($textValue, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$minutes)) {
-        return [timespan]::FromMinutes($minutes)
-    }
-
-    $parsedTimeSpan = [timespan]::Zero
-    if ([timespan]::TryParse($textValue, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedTimeSpan)) {
-        return $parsedTimeSpan
-    }
-
-    throw "Invalid Timespan '$Value'. Provide a number (minutes) or a TimeSpan value."
-}
-
-$includeEnd = $PSBoundParameters.ContainsKey('EndDate')
-if ($includeEnd -and $PSBoundParameters.ContainsKey('Timespan')) {
-    throw 'Specify either EndDate or Timespan, not both.'
-}
-
-if (-not $PSBoundParameters.ContainsKey('StartDate')) {
-    $StartDate = [datetime]::Today
-}
-
-if (-not $includeEnd) {
-    $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
-    $EndDate = $StartDate.Add($effectiveTimespan)
-    $includeEnd = $true
-}
-
-$headers = @{}
-if ($ElasticApiKey) {
-    $headers['Authorization'] = "ApiKey $ElasticApiKey"
-} elseif ($ElasticApiKeyPath -and (Test-Path $ElasticApiKeyPath)) {
-    $k = Get-Content -Path $ElasticApiKeyPath -Raw
-    $headers['Authorization'] = "ApiKey $k"
-}
+. (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
 function Get-IgnorePhrases {
     param(
@@ -190,8 +133,6 @@ function Test-IgnoredErrorText {
     return $false
 }
 
-$ignorePhrases = Get-IgnorePhrases -Path $IgnoreListPath
-
 function Get-ZugangVonKostenstelle {
     param(
         [string]$MessageData
@@ -207,6 +148,37 @@ function Get-ZugangVonKostenstelle {
     }
     return $null
 }
+
+<#
+═══════════════════════════════════════════════════════════
+  SCRIPT BODY
+═══════════════════════════════════════════════════════════
+#>
+
+$includeEnd = $PSBoundParameters.ContainsKey('EndDate')
+if ($includeEnd -and $PSBoundParameters.ContainsKey('Timespan')) {
+    throw 'Specify either EndDate or Timespan, not both.'
+}
+
+if (-not $PSBoundParameters.ContainsKey('StartDate')) {
+    $StartDate = [datetime]::Today
+}
+
+if (-not $includeEnd) {
+    $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
+    $EndDate = $StartDate.Add($effectiveTimespan)
+    $includeEnd = $true
+}
+
+if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
+    $ElasticUrl = (Get-ServerConfig).Elasticsearch.OrchestraSearchUrl
+}
+
+$credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
+$elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
+$headers = @{ 'Authorization' = "ApiKey $($elasticCred.GetNetworkCredential().Password)" }
+
+$ignorePhrases = Get-IgnorePhrases -Path $IgnoreListPath
 
 $filters = @(
     @{ term = @{ 'ScenarioName' = 'ITI_SUBFL_KAVIDE_speichern_v01_3287' } },

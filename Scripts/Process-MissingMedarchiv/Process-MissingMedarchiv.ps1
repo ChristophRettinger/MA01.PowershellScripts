@@ -9,8 +9,7 @@
     (CL_ID_BIG) filtered by BK.SUBFL_sourcedb (mapped from the database name).
     
     The mapping between on-prem database names and Elasticsearch index names is
-    provided via a CSV (columns: Anstalt,DatabaseName,ElasticName). By default, the
-    script loads `DatabaseMappings.csv` from the script folder. Elasticsearch paging
+    loaded from ServerConfig.psd1 (MedarchivDatabases). Elasticsearch paging
     reuses the Invoke-ElasticScrollSearch helper from Scripts/Common/ElasticSearchHelpers.ps1
     to keep scroll handling consistent between scripts.
 
@@ -29,32 +28,23 @@
 
 .PARAMETER DatabaseServerConnection
     SQL Server host and port in the format 'host,port'. Defaults to
-    'MedarchivSql.wienkav.at,1433'. Integrated security is used for authentication.
+    ServerConfig.psd1 (SqlServer.Medarchiv.Connection). Integrated security is used for authentication.
 
-    The database to query is resolved from the mapping CSV using the provided Anstalt.
+    The database to query is resolved from ServerConfig.psd1 (MedarchivDatabases) using the provided Anstalt.
 
 .PARAMETER Anstalt
     Identifier for the institution, or 'All' to process all entries
-    from the mapping CSV. No default.
+    from ServerConfig.psd1 (MedarchivDatabases). No default.
 
 .PARAMETER ElasticUrl
     Full Elasticsearch _search URL (including index pattern and query params).
-    Defaults to 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search'.
-
-.PARAMETER MappingCsvPath
-    Path to the CSV containing database-to-elastic name mappings. Defaults to
-    '<script folder>/DatabaseMappings.csv'.
+    Defaults to ServerConfig.psd1 (Elasticsearch.OrchestraSearchUrl).
 
 .PARAMETER ElasticTimeField
     Name of the time field in Elasticsearch to filter on. Defaults to '@timestamp'.
 
-.PARAMETER ElasticApiKey
-    Elasticsearch API key as a string. Sent as 'Authorization: ApiKey <key>'.
-    If omitted and ElasticApiKeyPath is provided, the key is read from file.
-
-.PARAMETER ElasticApiKeyPath
-    Path to a file containing the Elasticsearch API key. Used if ElasticApiKey is not provided.
-    Defaults to '.\elastic.key'.
+.PARAMETER ResetCredentials
+    Discard the saved Elasticsearch credential and prompt for a new API key.
 
 .PARAMETER IncludeElastic
     When specified, also performs the Elasticsearch query and includes its
@@ -87,25 +77,19 @@ param(
     [object]$Timespan,
 
     [Parameter(Mandatory=$false)]
-    [string]$DatabaseServerConnection = 'MedarchivSql.wienkav.at,1433',
+    [string]$DatabaseServerConnection = '',
 
     [Parameter(Mandatory=$false)]
     [string]$Anstalt = 'All',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
-
-    [Parameter(Mandatory=$false)]
-    [string]$MappingCsvPath = (Join-Path -Path $PSScriptRoot -ChildPath 'DatabaseMappings.csv'),
+    [string]$ElasticUrl = '',
 
     [Parameter(Mandatory=$false)]
     [string]$ElasticTimeField = '@timestamp',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKey,
-
-    [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath = (Join-Path -Path $PSScriptRoot -ChildPath 'elastic.key'),
+    [switch]$ResetCredentials,
 
     [Parameter(Mandatory=$false)]
     [int]$IncreaseElasticDateRange = 4,
@@ -123,35 +107,7 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
     throw "Shared Elastic helper not found at '$sharedHelpersPath'."
 }
 . $sharedHelpersPath
-
-function Resolve-EffectiveTimespan {
-    param(
-        [object]$Value,
-        [int]$DefaultMinutes = 15
-    )
-
-    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace("$Value")) {
-        return [timespan]::FromMinutes($DefaultMinutes)
-    }
-
-    if ($Value -is [timespan]) { return $Value }
-    if ($Value -is [byte] -or $Value -is [int16] -or $Value -is [int32] -or $Value -is [int64] -or $Value -is [single] -or $Value -is [double] -or $Value -is [decimal]) {
-        return [timespan]::FromMinutes([double]$Value)
-    }
-
-    $minutes = 0.0
-    $textValue = "$Value".Trim()
-    if ([double]::TryParse($textValue, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$minutes)) {
-        return [timespan]::FromMinutes($minutes)
-    }
-
-    $parsedTimeSpan = [timespan]::Zero
-    if ([timespan]::TryParse($textValue, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedTimeSpan)) {
-        return $parsedTimeSpan
-    }
-
-    throw "Invalid Timespan '$Value'. Provide a number (minutes) or a TimeSpan value."
-}
+. (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
 # Determine effective StartDate/EndDate defaults
 $includeEndDate = $PSBoundParameters.ContainsKey('EndDate')
@@ -169,20 +125,26 @@ if (-not $includeEndDate) {
     $includeEndDate = $true
 }
 
-# Load mappings
-if (-not (Test-Path -Path $MappingCsvPath)) {
-    Write-Error "Mapping CSV not found at '$MappingCsvPath'. Cannot resolve Anstalt mappings."
-    return
+# Load config and apply defaults
+$_cfg = Get-ServerConfig
+if ([string]::IsNullOrWhiteSpace($DatabaseServerConnection)) {
+    $DatabaseServerConnection = $_cfg.SqlServer.Medarchiv.Connection
 }
-$mappings = Import-Csv -Path $MappingCsvPath
+if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
+    $ElasticUrl = $_cfg.Elasticsearch.OrchestraSearchUrl
+}
+
+$allMappings = @($_cfg.MedarchivDatabases.GetEnumerator() |
+    Sort-Object Key |
+    ForEach-Object { [pscustomobject]@{ Anstalt = $_.Key; DatabaseName = $_.Value.DatabaseName; ElasticName = $_.Value.ElasticName } })
 
 # Select target mappings
 if ($Anstalt -and $Anstalt.Trim().ToLower() -eq 'all') {
-    $targetMappings = $mappings
+    $targetMappings = $allMappings
 } else {
-    $targetMappings = $mappings | Where-Object { $_.Anstalt -eq "$Anstalt" }
+    $targetMappings = @($allMappings | Where-Object { $_.Anstalt -eq "$Anstalt" })
     if (-not $targetMappings) {
-        Write-Error "No mapping found for Anstalt '$Anstalt' in '$MappingCsvPath'."
+        Write-Error "No mapping found for Anstalt '$Anstalt' in ServerConfig.psd1 (MedarchivDatabases)."
         return
     }
 }
@@ -193,24 +155,11 @@ if ($includeEndDate) {
     $query += " AND PROCESSINGTIME <= @EndDate"
 }
 
-# Resolve ES API key once if IncludeElastic
-$apiKey = $null
 $headers = @{ 'Content-Type' = 'application/json' }
 if ($IncludeElastic) {
-    if ($PSBoundParameters.ContainsKey('ElasticApiKey') -and $ElasticApiKey) {
-        $apiKey = $ElasticApiKey.Trim()
-    } elseif ($ElasticApiKeyPath) {
-        if (-not (Test-Path -Path $ElasticApiKeyPath)) {
-            Write-Warning "ElasticApiKeyPath '$ElasticApiKeyPath' not found. Elasticsearch results will be omitted."
-        } else {
-            $apiKey = (Get-Content -Path $ElasticApiKeyPath -Raw).Trim()
-        }
-    }
-    if ($apiKey) {
-        $headers['Authorization'] = "ApiKey $apiKey"
-    } else {
-        Write-Warning 'No Elasticsearch API key provided. Provide -ElasticApiKey or -ElasticApiKeyPath to enable ES query.'
-    }
+    $credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
+    $elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
+    $headers['Authorization'] = "ApiKey $($elasticCred.GetNetworkCredential().Password)"
 }
 
 # Collect results for all Anstalten
@@ -270,7 +219,7 @@ foreach ($map in $targetMappings) {
     $esMin = $null; $esMax = $null; $esCount = $null
     $esDistinct = $null
     $esQuerySucceeded = $false
-    if ($IncludeElastic -and $apiKey -and $dbCount -and $dbCount -gt 0) {
+    if ($IncludeElastic -and $dbCount -and $dbCount -gt 0) {
         try {
             Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'ES initial search' -PercentComplete 50
             # Build Elasticsearch query body per anstalt/database - fetch documents (no aggs)
@@ -333,7 +282,7 @@ foreach ($map in $targetMappings) {
     }
 
     # If counts differ, compute and write missing IDs present in DB but not in ES
-    if ($IncludeElastic -and $apiKey -and $esQuerySucceeded -and $dbCount -ne $esCount) {
+    if ($IncludeElastic -and $esQuerySucceeded -and $dbCount -ne $esCount) {
         try {
             Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'Computing missing IDs' -PercentComplete 96
 

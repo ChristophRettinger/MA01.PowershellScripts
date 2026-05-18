@@ -32,7 +32,8 @@ All scripts are located under the `Scripts` folder, each in its own subfolder na
 
 ## Shared utilities
 
-- **Scripts/Common/ElasticSearchHelpers.ps1** - Hosts `Invoke-ElasticScrollSearch`, a reusable helper that issues scroll queries, aggregates all hits, surfaces detailed error information, and optionally reports page progress for callers. Scripts such as Process-MissingMedarchiv, Evaluate-OrchestraErrorsViaElastic, and Write-ElasticDataToDatabase dot-source this file to keep Elasticsearch pagination logic consistent.
+- **Scripts/Common/ElasticSearchHelpers.ps1** - Hosts `Invoke-ElasticScrollSearch` (scroll queries with aggregated hits and page-progress callbacks), `Resolve-ElasticCredential` (CLIXML-based API key storage), `Get-ElasticSourceValue` (dotted-path field access), and `Resolve-EffectiveTimespan` (converts a number, TimeSpan, or string to a TimeSpan with a configurable default). Dot-sourced by all Elasticsearch scripts.
+- **Scripts/Common/ServerConfig.ps1** - Provides `Get-ServerConfig`, a cached loader for `ServerConfig.psd1`. Returns the full infrastructure hashtable (Elasticsearch URLs, SQL Server connections, Orchestra server list, PatAuskunft endpoints, Medarchiv database mappings).
 
 ## Documentation references
 

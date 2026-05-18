@@ -26,23 +26,18 @@
 
 .PARAMETER DatabaseServerConnection
     SQL Server host and port in the format 'host,port'. Defaults to
-    'idesql.wienkav.at,1433'. Integrated security is used for authentication.
+    ServerConfig.psd1 (SqlServer.Adm.Connection). Integrated security is used for authentication.
     The database is fixed to ADM.
 
 .PARAMETER ElasticUrl
     Full Elasticsearch _search URL (including index pattern and query params).
-    Defaults to 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search'.
+    Defaults to ServerConfig.psd1 (Elasticsearch.OrchestraSearchUrl).
 
 .PARAMETER ElasticTimeField
     Name of the time field in Elasticsearch to filter on. Defaults to '@timestamp'.
 
-.PARAMETER ElasticApiKey
-    Elasticsearch API key as a string. Sent as 'Authorization: ApiKey <key>'.
-    If omitted and ElasticApiKeyPath is provided, the key is read from file.
-
-.PARAMETER ElasticApiKeyPath
-    Path to a file containing the Elasticsearch API key. Used if ElasticApiKey is not provided.
-    Defaults to '.\elastic.key'.
+.PARAMETER ResetCredentials
+    Discard the saved Elasticsearch credential and prompt for a new API key.
 
 .PARAMETER IncreaseElasticDateRange
     Number of hours to extend the Elasticsearch time range beyond the DB range.
@@ -71,19 +66,16 @@ param(
     [object]$Timespan,
 
     [Parameter(Mandatory=$false)]
-    [string]$DatabaseServerConnection = 'idesql.wienkav.at,1433',
+    [string]$DatabaseServerConnection = '',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticUrl = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search',
+    [string]$ElasticUrl = '',
 
     [Parameter(Mandatory=$false)]
     [string]$ElasticTimeField = '@timestamp',
 
     [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKey,
-
-    [Parameter(Mandatory=$false)]
-    [string]$ElasticApiKeyPath = (Join-Path -Path $PSScriptRoot -ChildPath 'elastic.key'),
+    [switch]$ResetCredentials,
 
     [Parameter(Mandatory=$false)]
     [int]$IncreaseElasticDateRange = 4,
@@ -98,35 +90,7 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
     throw "Shared Elastic helper not found at '$sharedHelpersPath'."
 }
 . $sharedHelpersPath
-
-function Resolve-EffectiveTimespan {
-    param(
-        [object]$Value,
-        [int]$DefaultMinutes = 15
-    )
-
-    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace("$Value")) {
-        return [timespan]::FromMinutes($DefaultMinutes)
-    }
-
-    if ($Value -is [timespan]) { return $Value }
-    if ($Value -is [byte] -or $Value -is [int16] -or $Value -is [int32] -or $Value -is [int64] -or $Value -is [single] -or $Value -is [double] -or $Value -is [decimal]) {
-        return [timespan]::FromMinutes([double]$Value)
-    }
-
-    $minutes = 0.0
-    $textValue = "$Value".Trim()
-    if ([double]::TryParse($textValue, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$minutes)) {
-        return [timespan]::FromMinutes($minutes)
-    }
-
-    $parsedTimeSpan = [timespan]::Zero
-    if ([timespan]::TryParse($textValue, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedTimeSpan)) {
-        return $parsedTimeSpan
-    }
-
-    throw "Invalid Timespan '$Value'. Provide a number (minutes) or a TimeSpan value."
-}
+. (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
 # Determine effective StartDate/EndDate defaults
 $includeEndDate = $PSBoundParameters.ContainsKey('EndDate')
@@ -154,25 +118,19 @@ catch {
     Write-Warning "Failed to ensure output directory '$OutputDirectory': $_"
 }
 
-# Resolve ES API key (required because Elasticsearch processing is always included)
-$apiKey = $null
-if ($PSBoundParameters.ContainsKey('ElasticApiKey') -and $ElasticApiKey) {
-    $apiKey = $ElasticApiKey.Trim()
+$_cfg = Get-ServerConfig
+if ([string]::IsNullOrWhiteSpace($DatabaseServerConnection)) {
+    $DatabaseServerConnection = $_cfg.SqlServer.Adm.Connection
 }
-elseif ($ElasticApiKeyPath) {
-    if (-not (Test-Path -Path $ElasticApiKeyPath)) {
-        throw "ElasticApiKeyPath '$ElasticApiKeyPath' not found. Provide a valid path or use -ElasticApiKey."
-    }
-    $apiKey = (Get-Content -Path $ElasticApiKeyPath -Raw).Trim()
+if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
+    $ElasticUrl = $_cfg.Elasticsearch.OrchestraSearchUrl
 }
 
-if (-not $apiKey) {
-    throw 'No Elasticsearch API key provided. Supply -ElasticApiKey or -ElasticApiKeyPath.'
-}
-
+$credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
+$elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
 $headers = @{
     'Content-Type' = 'application/json'
-    'Authorization' = "ApiKey $apiKey"
+    'Authorization' = "ApiKey $($elasticCred.GetNetworkCredential().Password)"
 }
 
 $databaseName = 'ADM'

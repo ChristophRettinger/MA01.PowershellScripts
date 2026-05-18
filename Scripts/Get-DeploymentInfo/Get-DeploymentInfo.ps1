@@ -9,7 +9,7 @@
     Credentials are stored per server as CLIXML and reused across calls.
 
 .PARAMETER Server
-    One or more server names to query. Each name must exist in targets.csv.
+    One or more server names to query. Each name must exist in ServerConfig.psd1 (OrchestraTargets).
 
 .PARAMETER Mode
     Output mode: 'Version' (default) shows scenario versions; 'Landscape' shows landscape properties.
@@ -77,6 +77,9 @@ param(
 
 Set-StrictMode -Off
 
+$sharedDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'Common'
+. (Join-Path $sharedDir 'ServerConfig.ps1')
+
 $ScenarioNameTranslations = @(
     @('WIGEV_SUBFL', 'ITI_SUBFL'),
     @('_v01',        '')
@@ -98,14 +101,11 @@ function Write-PlainText {
 
 function Get-ServerBaseUrl {
     param([string]$ServerName)
-    $csvPath = Join-Path $PSScriptRoot '..\Resend-FromElastic\targets.csv'
-    $rows = Import-Csv $csvPath
-    $row = $rows | Where-Object { $_.Name -eq $ServerName } | Select-Object -First 1
-    if (-not $row) {
-        throw "Server '$($ServerName)' not found in targets.csv"
+    $entry = (Get-ServerConfig).OrchestraTargets[$ServerName]
+    if (-not $entry) {
+        throw "Server '$($ServerName)' not found in ServerConfig.psd1 (OrchestraTargets)"
     }
-    $uri = [Uri]$row.URL
-    return "$($uri.Scheme)://$($uri.Host):$($uri.Port)"
+    return $entry.BaseUrl
 }
 
 function Get-OrchCredential {
@@ -174,7 +174,7 @@ function Get-EntryTypeIcon {
     }
 }
 
-function Parse-JdbcUrl {
+function ConvertFrom-JdbcUrl {
     param([string]$Value)
     $result = @{ Server = ''; Database = '' }
     if ($Value -match 'jdbc:sqlserver://([^;]+)') {
@@ -202,7 +202,7 @@ function Get-LandscapeEntryProperties {
         return ,@()
     }
 
-    $propsUrl  = "$($BaseUrl)/OrchDyn/landscape/properties/$($scenarioId)/$($refId)"
+    $propsUrl  = "$($BaseUrl)$((Get-ServerConfig).OrchestraDeploymentApiBase)/landscape/properties/$($scenarioId)/$($refId)"
     $rawProps   = Invoke-OrchApi -Url $propsUrl -Credential $Credential
 
     $entryTypeName = [string]$EntryObj.entryTypeName
@@ -233,7 +233,7 @@ function Get-LandscapeEntryProperties {
 
         if ($propName -ieq 'URL') {
             if ($isDbConn) {
-                $jdbc = Parse-JdbcUrl -Value $propValue
+                $jdbc = ConvertFrom-JdbcUrl -Value $propValue
                 $result.Add(@{ PropName = 'Server';   Value = $jdbc.Server   })
                 $result.Add(@{ PropName = 'Database'; Value = $jdbc.Database })
                 $showUrl = switch ($IncludeDBUrl) {
@@ -295,7 +295,7 @@ foreach ($srv in $Server) {
 $scenariosByServer = @{}
 
 foreach ($srv in $Server) {
-    $url = "$($baseUrlMap[$srv])/OrchDyn/deployment/scenarioInfos"
+    $url = "$($baseUrlMap[$srv])$((Get-ServerConfig).OrchestraDeploymentApiBase)/deployment/scenarioInfos"
     $raw = Invoke-OrchApi -Url $url -Credential $credentialMap[$srv]
 
     foreach ($s in $raw) {
@@ -464,7 +464,7 @@ elseif ($Mode -eq 'Landscape') {
                 Select-Object -First 1
             if ($null -eq $scenario) { continue }
 
-            $infosUrl   = "$($baseUrlMap[$srv])/OrchDyn/landscape/infos/$($scenario.scenarioID)"
+            $infosUrl   = "$($baseUrlMap[$srv])$((Get-ServerConfig).OrchestraDeploymentApiBase)/landscape/infos/$($scenario.scenarioID)"
             $rawEntries = Invoke-OrchApi -Url $infosUrl -Credential $credentialMap[$srv]
 
             $landscapeData[$srv][$sName] = @{}

@@ -152,7 +152,7 @@ function Get-FirstStacktrace {
     return ''
 }
 
-function Normalize-Statement {
+function Format-Statement {
     param (
         [string]$Statement,
         [System.Collections.Generic.List[object]]$Rules
@@ -216,7 +216,7 @@ for ($index = 0; $index -lt $totalLines; $index++) {
             $timestamp = [datetime]::ParseExact($current.Timestamp, 'dd.MM.yyyy/HH:mm:ss.fff', [System.Globalization.CultureInfo]::InvariantCulture)
             if ($allowedSeverities.Contains($current.Severity)) {
                 $statement = Get-EntryStatement -Body $current.Body
-                $normalized = Normalize-Statement -Statement $statement -Rules $normalizationRules
+                $normalized = Format-Statement -Statement $statement -Rules $normalizationRules
                 if (-not [string]::IsNullOrWhiteSpace($normalized)) {
                     $stacktrace = Get-FirstStacktrace -Body $current.Body
                     if (-not $groups.ContainsKey($normalized)) {
@@ -252,7 +252,7 @@ if ($null -ne $current) {
     $timestamp = [datetime]::ParseExact($current.Timestamp, 'dd.MM.yyyy/HH:mm:ss.fff', [System.Globalization.CultureInfo]::InvariantCulture)
     if ($allowedSeverities.Contains($current.Severity)) {
         $statement = Get-EntryStatement -Body $current.Body
-        $normalized = Normalize-Statement -Statement $statement -Rules $normalizationRules
+        $normalized = Format-Statement -Statement $statement -Rules $normalizationRules
         if (-not [string]::IsNullOrWhiteSpace($normalized)) {
             $stacktrace = Get-FirstStacktrace -Body $current.Body
             if (-not $groups.ContainsKey($normalized)) {
