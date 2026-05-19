@@ -93,7 +93,15 @@ param (
     [string]$OutputDirectory
 )
 
-. (Join-Path (Split-Path -Parent $PSScriptRoot) 'Common\ScenarioHelpers.ps1')
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
+$sharedHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ScenarioHelpers.ps1'
+if (-not (Test-Path -Path $sharedHelpersPath)) {
+    throw "Shared helper not found at '$sharedHelpersPath'."
+}
+. $sharedHelpersPath
 
 $resolvedPath = (Resolve-Path -Path $Path).Path
 

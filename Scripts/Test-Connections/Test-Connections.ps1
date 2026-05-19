@@ -34,11 +34,13 @@ param(
     [switch]$TestOnly
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 # Prevent running in ConstrainedLanguage mode
 if ($ExecutionContext.SessionState.LanguageMode -eq "ConstrainedLanguage")
 {
-    Write-Host "Cannot execute script in ConstrainedLanguage ($($ExecutionContext.SessionState.LanguageMode)). Execute with administrative rights." -ForegroundColor Red
-    exit
+    throw "Cannot execute script in ConstrainedLanguage ($($ExecutionContext.SessionState.LanguageMode)). Execute with administrative rights."
 }
 
 # Build path to hosts.csv in the same directory as the script
@@ -47,8 +49,7 @@ $computerName = $env:COMPUTERNAME
 
 # Check if CSV file exists
 if (-Not (Test-Path $csvFilePath)) {
-    Write-Host "CSV file not found at path: $csvFilePath" -ForegroundColor Red
-    exit 1
+    throw "CSV file not found at path: $($csvFilePath)"
 }
 
 # Import hosts from CSV
@@ -57,8 +58,7 @@ $changesMade = $false
 
 # Ensure CSV has a Hostname column
 if (-Not ($hosts | Get-Member -Name Hostname)) {
-    Write-Host "CSV file must contain a 'Hostname' column." -ForegroundColor Red
-    exit 1
+    throw "CSV file must contain a 'Hostname' column."
 }
 
 foreach ($entry in $hosts) {

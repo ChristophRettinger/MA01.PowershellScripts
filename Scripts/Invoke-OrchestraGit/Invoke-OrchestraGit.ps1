@@ -42,6 +42,9 @@ param (
     [string]$OutputDirectory
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 $requiredExcludeEntries = @(
     '/.orc.cred',
     '/association.map',
@@ -382,6 +385,16 @@ function Get-OutputStatusLine {
     return "$($repoDisplay) | $($lastCommitDisplay) | $($tagDisplay) | $($Status.Overview)"
 }
 
+function Write-ReportLine {
+    param([string]$Text = '', [string]$Color = 'White', [switch]$NoNewline)
+    Write-Host $Text -ForegroundColor $Color -NoNewline:$NoNewline
+    $script:outputLineBuffer += $Text
+    if (-not $NoNewline) {
+        [void]$script:outputLines.Add($script:outputLineBuffer)
+        $script:outputLineBuffer = ''
+    }
+}
+
 <#
 ════════════════════════════════════════════════════════
   SCRIPT BODY
@@ -394,15 +407,15 @@ if (-not $repositoryRoots -or $repositoryRoots.Count -eq 0) {
     return
 }
 
-$outputLines = New-Object System.Collections.Generic.List[string]
+$script:outputLines      = [System.Collections.Generic.List[string]]::new()
+$script:outputLineBuffer = ''
 
 switch ($Action) {
     'Status' {
         foreach ($repositoryRoot in $repositoryRoots) {
             Add-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
-            Write-RepositoryStatusLine -Status $status
-            $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
+            Write-ReportLine (Get-OutputStatusLine -Status $status) 'Cyan'
         }
     }
     'Update' {
@@ -411,8 +424,7 @@ switch ($Action) {
             $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
-            Write-RepositoryStatusLine -Status $status
-            $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
+            Write-ReportLine (Get-OutputStatusLine -Status $status) 'Cyan'
         }
     }
     'Pull' {
@@ -421,8 +433,7 @@ switch ($Action) {
             $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
-            Write-RepositoryStatusLine -Status $status
-            $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
+            Write-ReportLine (Get-OutputStatusLine -Status $status) 'Cyan'
         }
     }
     'Reset' {
@@ -431,8 +442,7 @@ switch ($Action) {
             $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
-            Write-RepositoryStatusLine -Status $status
-            $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
+            Write-ReportLine (Get-OutputStatusLine -Status $status) 'Cyan'
         }
     }
     'Clean' {
@@ -441,8 +451,7 @@ switch ($Action) {
             $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
-            Write-RepositoryStatusLine -Status $status
-            $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
+            Write-ReportLine (Get-OutputStatusLine -Status $status) 'Cyan'
         }
     }
 }
@@ -473,6 +482,7 @@ if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
         New-Item -Path $outputFolder -ItemType Directory -Force | Out-Null
     }
 
-    $outputLines | Out-File -FilePath $outputPath -Encoding utf8
+    if ($script:outputLineBuffer) { [void]$script:outputLines.Add($script:outputLineBuffer); $script:outputLineBuffer = '' }
+    $script:outputLines | Set-Content -Path $outputPath -Encoding UTF8
     Write-Host "Results written to '$($outputPath)'" -ForegroundColor Cyan
 }

@@ -32,6 +32,9 @@ param (
     [int]$Limit = 1
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 function Get-Median {
     param (
         [double[]]$values

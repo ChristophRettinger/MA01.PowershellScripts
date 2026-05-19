@@ -75,6 +75,9 @@ param(
     [string]$OutputDirectory
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 Set-StrictMode -Off
 
 $sharedDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'Common'

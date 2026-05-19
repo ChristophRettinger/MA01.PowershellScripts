@@ -37,6 +37,7 @@ Read the full file. All subsequent checks are based on this content.
 | C4 | Missing `<# .SYNOPSIS` documentation block at the top of the script | WARN |
 | C5 | `ScenarioName.keyword` used in an Elasticsearch query body | WARN |
 | C6 | Script dot-sources `ElasticSearchHelpers.ps1` but still contains its own paging loop | WARN |
+| C7 | Script dot-sources a shared helper without a `Test-Path` guard — e.g. `. $path` without first checking `if (-not (Test-Path $path)) { throw }` | WARN |
 
 ### Step 4 — PowerShell best practices
 
@@ -46,9 +47,14 @@ Read the full file. All subsequent checks are based on this content.
 | P2 | Aliases used inside the script body: `ls`, `dir`, `%`, `?`, `select`, `where`, `ft`, `fl`, `gci`, `gc`, `ni`, `rm`, `cp`, `mv`, `cat`, `echo` | INFO |
 | P3 | `Write-Host` used inside a function that is supposed to return data (functions should use `Write-Output` or simply return; `Write-Host` in top-level script flow is fine) | INFO |
 | P4 | `Invoke-RestMethod` or `Invoke-WebRequest` called without `-ErrorAction Stop` and outside a `try/catch` | WARN |
-| P5 | Bare `exit` without an exit code in an error path | INFO |
-| P6 | `$null -eq` check written the wrong way around (`$x -eq $null`) — arrays can cause false results | INFO |
+| P5 | `$ErrorActionPreference = 'Stop'` not set at the top of the script (immediately after the `param` block) | WARN |
+| P6 | `Set-StrictMode -Version Latest` not set at the top of the script | WARN |
 | P7 | Script file name uses a non-approved verb as its `Verb-` prefix — applies the same `Get-Verb` rule as P1 but to the `.ps1` file name itself. Common offenders: `Analyze-`, `Evaluate-`, `Process-`, `Extract-`, `Create-`, `Handle-`, `Call-`, `Transfer-`, `Resend-`, `Validate-` | WARN |
+| P8 | `exit` or `exit 1` used anywhere in the script. `exit` terminates the entire PowerShell host — unsafe when dot-sourced, run from an IDE, or called in a pipeline. Use `throw` for fatal errors, `return` for early exits | WARN |
+| P9 | A no-results / nothing-found condition is signaled with `throw` or `Write-Error` instead of `Write-Warning "..."; return`. Throwing is too aggressive for expected empty results | INFO |
+| P10 | Script signals invalid user input (bad parameter value, conflicting options) with `Write-Error; return` instead of `throw`. Bad input is a programming/user error — use `throw` | INFO |
+| P11 | Manual numeric range check in the script body (e.g. `if ($x -le 0) { ... }`) that could be replaced with a `[ValidateRange(...)]` attribute on the parameter declaration | INFO |
+| P12 | `$null -eq` check written the wrong way around (`$x -eq $null`) — arrays can cause false results | INFO |
 
 ### Step 5 — Security checks
 
@@ -64,7 +70,7 @@ Read the full file. All subsequent checks are based on this content.
 
 There are two canonical patterns, both using CLIXML (DPAPI-encrypted, user+machine bound):
 
-**User credentials** (username + password): `Get-Credential` → `Export-Clixml` to `$PSScriptRoot\<server>.credentials.clixml`. On reload: `Import-Clixml`. Reference: `Get-DeploymentInfo.ps1` (`Get-OrchCredential`) and `Call-PatAuskunft.ps1`.
+**User credentials** (username + password): `Get-Credential` → `Export-Clixml` to `$PSScriptRoot\<server>.credentials.clixml`. On reload: `Import-Clixml`. Reference: `Get-DeploymentInfo.ps1` (`Get-OrchCredential`) and `Invoke-PatAuskunft.ps1`.
 
 **API keys** (single opaque string): call `Resolve-ElasticCredential` from `Scripts/Common/ElasticSearchHelpers.ps1`, passing `$PSScriptRoot\elastic.credentials.clixml` as `-CredentialPath`. The API key is stored as the password field of a PSCredential and extracted with `.GetNetworkCredential().Password`. Reference: all 7 Elasticsearch scripts.
 
@@ -91,7 +97,37 @@ All service URLs, server names, connection strings, and environment-to-URL mappi
 
 ### Step 8 — Colorful output and OutputDirectory support
 
-Reference implementation: `Get-DeploymentInfo.ps1` — `Write-Host` with `-ForegroundColor` for console; a `$script:OutputBuilder` (`StringBuilder`) capturing plain text via `Write-PlainText`; final `Set-Content -Encoding UTF8` to a timestamped file in `$OutputDirectory`.
+**Canonical output pattern** — use `Write-ReportLine` with a `$script:outputLineBuffer` for `-NoNewline` support:
+
+```powershell
+$script:outputLines      = [System.Collections.Generic.List[string]]::new()
+$script:outputLineBuffer = ''
+
+function Write-ReportLine {
+    param([string]$Text = '', [string]$Color = 'White', [switch]$NoNewline)
+    Write-Host $Text -ForegroundColor $Color -NoNewline:$NoNewline
+    $script:outputLineBuffer += $Text
+    if (-not $NoNewline) {
+        [void]$script:outputLines.Add($script:outputLineBuffer)
+        $script:outputLineBuffer = ''
+    }
+}
+```
+
+At the end of the script, flush any unflushed buffer and write the file:
+
+```powershell
+if ($script:outputLineBuffer) { [void]$script:outputLines.Add($script:outputLineBuffer); $script:outputLineBuffer = '' }
+if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
+    $stamp    = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $filePath = Join-Path $OutputDirectory "ScriptName_$stamp.txt"
+    $script:outputLines | Set-Content -Path $filePath -Encoding UTF8
+    Write-Host "Report written to '$filePath'" -ForegroundColor Cyan
+}
+```
+
+Scripts that produce structured tabular data use `Export-Csv -NoTypeInformation -Encoding UTF8` instead and do **not** need `Write-ReportLine`.
 
 | ID | What to check | Severity |
 |----|---------------|----------|
@@ -99,6 +135,8 @@ Reference implementation: `Get-DeploymentInfo.ps1` — `Write-Host` with `-Foreg
 | O2 | Script has no `-OutputDirectory` parameter (or equivalent) for writing output to a file | INFO |
 | O3 | Script has `-OutputDirectory` but does not write a file when the parameter is supplied (i.e. the parameter exists but is unused/ignored) | WARN |
 | O4 | Script writes to an output file but does not use `-Encoding UTF8` | WARN |
+| O5 | Script has `-OutputDirectory` and produces human-readable text output but uses bare `Write-Host`, a `StringBuilder`, or a plain list instead of the `Write-ReportLine` / `$script:outputLineBuffer` pattern | WARN |
+| O6 | Script defines `Write-ReportLine` but does not declare `$script:outputLineBuffer` — partial-color lines via `-NoNewline` will silently drop content from the file | WARN |
 
 ### Step 9 — File encoding
 
@@ -151,7 +189,6 @@ Key established parameter names to enforce:
 - `ScenarioName` — Orchestra scenario filter
 - `OutputDirectory` — file output path
 - `ElasticUrl` — Elasticsearch base URL
-- `ElasticApiKey` / `ElasticApiKeyPath` — Elasticsearch auth
 - `Environment` — deployment environment (`production`, `staging`, `testing`, `development`)
 - `ResetCredentials` — force credential re-prompt
 - `BusinessCaseId` with alias `MSGID` — message/case identifier

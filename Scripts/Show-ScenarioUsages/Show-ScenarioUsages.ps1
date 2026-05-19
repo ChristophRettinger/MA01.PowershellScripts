@@ -57,7 +57,15 @@ param (
     [string]$OutputDirectory = ''
 )
 
-. (Join-Path (Split-Path -Parent $PSScriptRoot) 'Common\ScenarioHelpers.ps1')
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
+$sharedHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ScenarioHelpers.ps1'
+if (-not (Test-Path -Path $sharedHelpersPath)) {
+    throw "Shared helper not found at '$sharedHelpersPath'."
+}
+. $sharedHelpersPath
 
 function Get-TargetKind {
     param (
@@ -99,9 +107,13 @@ function Test-DefinitionMatch {
 }
 
 function Write-ReportLine {
-    param([string]$Text = '', [string]$Color = 'White')
-    Write-Host $Text -ForegroundColor $Color
-    [void]$script:outputLines.Add($Text)
+    param([string]$Text = '', [string]$Color = 'White', [switch]$NoNewline)
+    Write-Host $Text -ForegroundColor $Color -NoNewline:$NoNewline
+    $script:outputLineBuffer += $Text
+    if (-not $NoNewline) {
+        [void]$script:outputLines.Add($script:outputLineBuffer)
+        $script:outputLineBuffer = ''
+    }
 }
 
 <#
@@ -167,6 +179,7 @@ $script:codeDefinitions = @(
 )
 
 $script:outputLines = [System.Collections.Generic.List[string]]::new()
+$script:outputLineBuffer = ''
 
 $requestedCodeSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 if ($PSBoundParameters.ContainsKey('Codes') -and $Codes) {
@@ -359,6 +372,7 @@ if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
     }
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $outputPath = Join-Path -Path $OutputDirectory -ChildPath "Show-ScenarioUsages_$timestamp.txt"
+    if ($script:outputLineBuffer) { [void]$script:outputLines.Add($script:outputLineBuffer); $script:outputLineBuffer = '' }
     $script:outputLines | Set-Content -Path $outputPath -Encoding UTF8
     Write-Host "Report written to '$outputPath'" -ForegroundColor Cyan
 }

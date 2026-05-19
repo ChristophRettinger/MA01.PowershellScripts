@@ -108,6 +108,8 @@ param(
     [string]$OutputDirectory = ''
 )
 
+Set-StrictMode -Version Latest
+
 $ErrorActionPreference = 'Stop'
 
 # MLLP framing bytes

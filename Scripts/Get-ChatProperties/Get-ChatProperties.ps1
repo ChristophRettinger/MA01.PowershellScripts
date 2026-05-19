@@ -34,10 +34,12 @@ param (
     [string[]]$Properties = @("Summary", "KeyTopics", "WorkflowIdeas")
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 # Check if input file exists
 if (-not (Test-Path -Path $InputFile)) {
-    Write-Error "Input file '$InputFile' does not exist."
-    exit 1
+    throw "Input file '$($InputFile)' does not exist."
 }
 
 try {
@@ -46,8 +48,7 @@ try {
 
     # Ensure the root is an array
     if (-not ($jsonContent -is [System.Collections.IEnumerable])) {
-        Write-Error "Input JSON must be an array of objects."
-        exit 1
+        throw "Input JSON must be an array of objects."
     }
 
     # Select only the desired properties

@@ -64,6 +64,9 @@ param(
     [switch]$Once
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 # Ensure log root exists
 [void][IO.Directory]::CreateDirectory($OutputDirectory)
 

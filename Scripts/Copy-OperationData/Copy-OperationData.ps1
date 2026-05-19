@@ -58,13 +58,22 @@ param(
     [string] $ConfigFile,
 
     [Parameter(Mandatory = $true)]
+    [ValidateRange(1, [int]::MaxValue)]
     [int] $MaxRecords,
 
     [Parameter(Mandatory = $false)]
     [int] $DelayBetweenBatches = 1
 )
 
-. (Join-Path (Split-Path -Parent $PSScriptRoot) 'Common\ServerConfig.ps1')
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
+$sharedHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ServerConfig.ps1'
+if (-not (Test-Path -Path $sharedHelpersPath)) {
+    throw "Shared helper not found at '$sharedHelpersPath'."
+}
+. $sharedHelpersPath
 
 function Get-LastProcessedDataStoreId {
     param(
@@ -124,11 +133,6 @@ function Save-LastProcessedDataStoreId {
   SCRIPT BODY
 ════════════════════════════════════════════════════════
 #>
-
-if ($MaxRecords -le 0) {
-    Write-Error 'MaxRecords must be greater than zero.'
-    return
-}
 
 Add-Type -AssemblyName System.Data
 

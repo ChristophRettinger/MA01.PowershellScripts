@@ -34,6 +34,9 @@ param(
     [string] $HostNameColumn = 'LookupHostname'
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 # Import the CSV
 $data = Import-Csv -Path $InputCsv
 

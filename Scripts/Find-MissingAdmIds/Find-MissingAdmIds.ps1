@@ -84,6 +84,9 @@ param(
     [string]$OutputDirectory = (Join-Path -Path $PSScriptRoot -ChildPath 'Output')
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
 $sharedHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ElasticSearchHelpers.ps1'
 if (-not (Test-Path -Path $sharedHelpersPath)) {
