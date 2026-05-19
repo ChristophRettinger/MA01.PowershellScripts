@@ -110,6 +110,12 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
 }
 . $sharedHelpersPath
 
+$scenarioHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ScenarioHelpers.ps1'
+if (-not (Test-Path -Path $scenarioHelpersPath)) {
+    throw "Shared scenario helper not found at '$scenarioHelpersPath'."
+}
+. $scenarioHelpersPath
+
 function Write-ColorizedXml {
     [CmdletBinding()]
     param(
@@ -281,6 +287,9 @@ if ($null -eq $credential) {
     $credential = Get-Credential -Message 'Enter PatAuskunft credentials'
     $credential | Export-Clixml -Path $credentialsPath
 }
+
+if ($CASENO) { $CASENO = Format-CaseNumber -CaseNumber $CASENO }
+if ($AID)    { $AID    = Format-CaseNumber -CaseNumber $AID    }
 
 $effectiveId1 = if ($CASENO) { $CASENO } elseif ($AID) { $AID } else { $ID1 }
 $effectiveId2 = if ($BID) { $BID } else { $ID2 }

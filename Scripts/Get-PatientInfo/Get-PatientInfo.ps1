@@ -157,6 +157,12 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
     throw "Shared Elastic helper not found at '$sharedHelpersPath'."
 }
 . $sharedHelpersPath
+
+$scenarioHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ScenarioHelpers.ps1'
+if (-not (Test-Path -Path $scenarioHelpersPath)) {
+    throw "Shared scenario helper not found at '$scenarioHelpersPath'."
+}
+. $scenarioHelpersPath
 . (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
 function Get-CaseFieldName {
@@ -501,7 +507,7 @@ if (-not $PIDISH -and -not $CASENO) {
 }
 
 if ($PIDISH) { $PIDISH = $PIDISH.Trim() }
-if ($CASENO) { $CASENO = $CASENO.Trim() }
+if ($CASENO) { $CASENO = Format-CaseNumber -CaseNumber $CASENO }
 if ($MOVENO) { $MOVENO = $MOVENO.Trim() }
 
 $caseField = Get-CaseFieldName -CaseNumber $CASENO

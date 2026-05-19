@@ -257,6 +257,12 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
     throw "Shared Elastic helper not found at '$sharedHelpersPath'."
 }
 . $sharedHelpersPath
+
+$scenarioHelpersPath = Join-Path -Path $sharedHelpersDirectory -ChildPath 'ScenarioHelpers.ps1'
+if (-not (Test-Path -Path $scenarioHelpersPath)) {
+    throw "Shared scenario helper not found at '$scenarioHelpersPath'."
+}
+. $scenarioHelpersPath
 . (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
 function Initialize-SystemXmlLinq {
@@ -727,6 +733,7 @@ if ($BusinessCaseId -and -not $PSBoundParameters.ContainsKey('Stage')) {
 }
 
 $CaseNo = @(Format-FilterValues -Values $CaseNo)
+$CaseNo = @($CaseNo | ForEach-Object { Format-CaseNumber -CaseNumber $_ })
 $PatientId = @(Format-FilterValues -Values $PatientId)
 $SubId = @(Format-FilterValues -Values $SubId)
 $BusinessCaseId = @(Format-FilterValues -Values $BusinessCaseId)

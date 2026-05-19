@@ -1,6 +1,24 @@
 # Scripts/Common/ScenarioHelpers.ps1
 # Shared helpers for scripts that work with Orchestra scenario folders.
 
+function Format-CaseNumber {
+    <#
+    .SYNOPSIS
+        Normalize a two-part case number (AID/MAC) to exactly 20 characters.
+    .DESCRIPTION
+        Detects the pattern <non-whitespace-part> <8-digit-part> and pads the first
+        segment with trailing spaces so the result is always 12 + 8 = 20 characters.
+        Any other value is returned unchanged (after trimming leading/trailing spaces).
+    #>
+    param([string]$CaseNumber)
+    if ([string]::IsNullOrWhiteSpace($CaseNumber)) { return $CaseNumber }
+    $trimmed = $CaseNumber.Trim()
+    if ($trimmed -match '^(\S+)\s+(\d{8})$') {
+        return "$($Matches[1].PadRight(12))$($Matches[2])"
+    }
+    return $trimmed
+}
+
 function Get-ScenarioInfo {
     param (
         [Parameter(Mandatory = $true)]
