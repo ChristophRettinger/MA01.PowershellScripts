@@ -170,6 +170,7 @@ function Get-CaseFieldName {
     if ($trimmed -match '^\d{10}$') { return 'BK._CASENO_ISH' }
     if ($trimmed -match '^\w{9}$') { return 'BK._CASENO_BC' }
     if ($trimmed -match '^\d{8}\s+\d{8}$') { return 'BK._CASENO' }
+    if ($trimmed -match '^901\w{2,5}\s+\d{8}$') { return 'BK._CASENO' } # AKH
     return $null
 }
 
@@ -510,7 +511,7 @@ if ($CASENO -and -not $caseField) {
 $caseFilterValue = if ($CASENO) { $CASENO.Trim() } else { $null }
 
 if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
-    $ElasticUrl = (Get-ServerConfig).Elasticsearch.SubscriptionFlowSearchUrl
+    $ElasticUrl = (Get-ServerConfig).Elasticsearch.OrchestraSearchUrl
 }
 
 $credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
