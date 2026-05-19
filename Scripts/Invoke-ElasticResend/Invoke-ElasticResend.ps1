@@ -726,20 +726,20 @@ if ($BusinessCaseId -and -not $PSBoundParameters.ContainsKey('Stage')) {
     $Stage = 'Input'
 }
 
-$CaseNo = Format-FilterValues -Values $CaseNo
-$PatientId = Format-FilterValues -Values $PatientId
-$SubId = Format-FilterValues -Values $SubId
-$BusinessCaseId = Format-FilterValues -Values $BusinessCaseId
-$rawBusinessCaseIds = Resolve-RawBusinessCaseIdsFromInvocation $MyInvocation
+$CaseNo = @(Format-FilterValues -Values $CaseNo)
+$PatientId = @(Format-FilterValues -Values $PatientId)
+$SubId = @(Format-FilterValues -Values $SubId)
+$BusinessCaseId = @(Format-FilterValues -Values $BusinessCaseId)
+$rawBusinessCaseIds = @(Resolve-RawBusinessCaseIdsFromInvocation $MyInvocation)
 if ($rawBusinessCaseIds.Count -gt 0 -and $rawBusinessCaseIds.Count -eq $BusinessCaseId.Count) {
-    $BusinessCaseId = Format-FilterValues -Values $rawBusinessCaseIds
+    $BusinessCaseId = @(Format-FilterValues -Values $rawBusinessCaseIds)
 }
-$Category = Format-FilterValues -Values $Category
-$Subcategory = Format-FilterValues -Values $Subcategory
-$HcmMsgEvent = Format-FilterValues -Values $HcmMsgEvent
-$Instance = Format-FilterValues -Values $Instance
-$EnvironmentFilters = Format-FilterValues -Values $Environment
-$ReplacementPairs = ConvertTo-ReplacementPairs -Values $Replacements
+$Category = @(Format-FilterValues -Values $Category)
+$Subcategory = @(Format-FilterValues -Values $Subcategory)
+$HcmMsgEvent = @(Format-FilterValues -Values $HcmMsgEvent)
+$Instance = @(Format-FilterValues -Values $Instance)
+$EnvironmentFilters = @(Format-FilterValues -Values $Environment)
+$ReplacementPairs = @(ConvertTo-ReplacementPairs -Values $Replacements)
 
 $effectiveFilterCount = 0
 if (-not [string]::IsNullOrWhiteSpace($ScenarioName)) { $effectiveFilterCount++ }
