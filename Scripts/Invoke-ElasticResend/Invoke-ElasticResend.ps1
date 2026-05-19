@@ -939,7 +939,7 @@ if ($duplicateBusinessCaseCount -gt 0) {
 
 if ($Action -eq 'Query') {
     $grouped = $records | Group-Object -Property ScenarioName | Sort-Object Name
-    $summary = foreach ($group in $grouped) {
+    $summary = @(foreach ($group in $grouped) {
         $timestamps = @($group.Group | ForEach-Object { [datetime](Get-ElasticSourceValue -Source $_ -FieldPath '@timestamp') })
         [pscustomobject]@{
             ScenarioName = $group.Name
@@ -947,7 +947,7 @@ if ($Action -eq 'Query') {
             MinTimestamp = ($timestamps | Measure-Object -Minimum).Minimum
             MaxTimestamp = ($timestamps | Measure-Object -Maximum).Maximum
         }
-    }
+    })
 
     if ($summary.Count -eq 0) {
         Write-RunLog -Level 'INFO' -Message 'No records matched the filter.'
