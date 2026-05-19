@@ -389,48 +389,6 @@ function New-IdentityClause {
     return @{ bool = @{ should = $shouldClauses; minimum_should_match = 1 } }
 }
 
-$caseField = Get-CaseFieldName -CaseNumber $CASENO
-if ($CASENO -and -not $caseField) {
-    Write-Warning 'Case number did not match known patterns. Searching all known identifiers.'
-}
-$caseFilterValue = if ($CASENO) { $CASENO.Trim() } else { $null }
-
-if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
-    $ElasticUrl = (Get-ServerConfig).Elasticsearch.SubscriptionFlowSearchUrl
-}
-
-$credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
-$elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
-$headers = @{ 'Content-Type' = 'application/json'; 'Authorization' = "ApiKey $($elasticCred.GetNetworkCredential().Password)" }
-
-$baseMust = @(
-    @{ term = @{ 'BK.SUBFL_messagetype' = 'HCM' } },
-    @{ term = @{ 'Environment' = $Environment } },
-    @{ bool = @{ should = @(
-        @{ term = @{ 'BK.SUBFL_stage' = 'Input' } },
-        @{ bool = @{ must = @(
-            @{ term = @{ 'BK.SUBFL_stage' = 'Output' } },
-            @{ terms = @{ 'ScenarioName' = @('ITI_SUBFL_KAVIDE_speichern_v01_3287','ITI_SUBFL_Sense_senden_4292') } }
-        ) } }
-    ); minimum_should_match = 1 } }
-)
-
-$mustNot = @(
-    @{ term = @{ 'WorkflowPattern' = 'REQ_RESP' } },
-    @{ term = @{ 'BK.SUBFL_drop' = $true } }
-)
-
-if ($StartDate -or $includeEndDate) {
-    $rangeEntry = @{ range = @{ ($ElasticTimeField) = @{} } }
-    if ($StartDate) { $rangeEntry.range[$ElasticTimeField].gte = $StartDate.ToString('o') }
-    if ($EndDate) { $rangeEntry.range[$ElasticTimeField].lte = $EndDate.ToString('o') }
-    $baseMust += $rangeEntry
-}
-
-if ($MOVENO) {
-    $baseMust += @{ term = @{ 'BK._MOVENO' = $MOVENO.Trim() } }
-}
-
 function Invoke-PatientQuery {
     param(
         [string[]]$PidFilters,
@@ -438,7 +396,7 @@ function Invoke-PatientQuery {
     )
 
     $mustClauses = @($baseMust)
-    
+
     $identityClause = $null
     try {
         $identityClause = New-IdentityClause -PidFilters $PidFilters -CaseField $caseField -CaseValue $CASENO -IncludeCase $IncludeCase
@@ -448,19 +406,19 @@ function Invoke-PatientQuery {
     }
 
     $mustClauses += $identityClause
-    
+
     $body = @{
-        size = 500
-        sort = @(@{ $ElasticTimeField = @{ order = 'asc' } })
-        query = @{ bool = @{ must = $mustClauses; must_not = $mustNot } }        
+        size  = 500
+        sort  = @(@{ $ElasticTimeField = @{ order = 'asc' } })
+        query = @{ bool = @{ must = $mustClauses; must_not = $mustNot } }
     }
 
     $hits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Headers $headers -Body $body -TimeoutSec 120
     return $hits
 }
 
-$collectedHits = @{}
 $caseFieldPaths = @('BK._CASENO_ISH','BK._CASENO_BC','BK._CASENO')
+
 function Get-CaseValuesFromSource {
     param([object]$Source)
 
@@ -521,30 +479,71 @@ if ($includeEndDate -and $PSBoundParameters.ContainsKey('Timespan')) {
 
 if ($PSBoundParameters.ContainsKey('Timespan')) {
     $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
-    if ($StartDate) {
+    if ($PSBoundParameters.ContainsKey('StartDate')) {
         $EndDate = $StartDate.Add($effectiveTimespan)
     } else {
         $EndDate = Get-Date
         $StartDate = $EndDate.Subtract($effectiveTimespan)
     }
 } else {
-    if (-not $EndDate) {
+    if (-not $includeEndDate) {
         $EndDate = Get-Date
     }
-
-    if (-not $StartDate) {
+    if (-not $PSBoundParameters.ContainsKey('StartDate')) {
         $StartDate = $EndDate.AddDays(-14)
     }
 }
 
 if (-not $PIDISH -and -not $CASENO) {
-    Write-Error 'Provide either PIDISH or CASENO to search for patient information.'
+    Write-Warning 'Provide either PIDISH or CASENO to search for patient information.'
     return
 }
 
 if ($PIDISH) { $PIDISH = $PIDISH.Trim() }
 if ($CASENO) { $CASENO = $CASENO.Trim() }
 if ($MOVENO) { $MOVENO = $MOVENO.Trim() }
+
+$caseField = Get-CaseFieldName -CaseNumber $CASENO
+if ($CASENO -and -not $caseField) {
+    Write-Warning 'Case number did not match known patterns. Searching all known identifiers.'
+}
+$caseFilterValue = if ($CASENO) { $CASENO.Trim() } else { $null }
+
+if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
+    $ElasticUrl = (Get-ServerConfig).Elasticsearch.SubscriptionFlowSearchUrl
+}
+
+$credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
+$elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
+$headers = @{ 'Content-Type' = 'application/json'; 'Authorization' = "ApiKey $($elasticCred.GetNetworkCredential().Password)" }
+
+$collectedHits = @{}
+
+$baseMust = @(
+    @{ term = @{ 'BK.SUBFL_messagetype' = 'HCM' } },
+    @{ term = @{ 'Environment' = $Environment } },
+    @{ bool = @{ should = @(
+        @{ term = @{ 'BK.SUBFL_stage' = 'Input' } },
+        @{ bool = @{ must = @(
+            @{ term = @{ 'BK.SUBFL_stage' = 'Output' } },
+            @{ terms = @{ 'ScenarioName' = @('ITI_SUBFL_KAVIDE_speichern_v01_3287','ITI_SUBFL_Sense_senden_4292') } }
+        ) } }
+    ); minimum_should_match = 1 } }
+)
+
+$mustNot = @(
+    @{ term = @{ 'WorkflowPattern' = 'REQ_RESP' } },
+    @{ term = @{ 'BK.SUBFL_drop' = $true } }
+)
+
+$baseMust += @{ range = @{ ($ElasticTimeField) = @{
+    gte = $StartDate.ToString('o')
+    lte = $EndDate.ToString('o')
+} } }
+
+if ($MOVENO) {
+    $baseMust += @{ term = @{ 'BK._MOVENO' = $MOVENO.Trim() } }
+}
 
 $initialPidFilters = @()
 if ($PIDISH) { $initialPidFilters += $PIDISH.Trim() }
