@@ -63,7 +63,7 @@
     results.
 
 .EXAMPLE
-    .\Validate-Scenarios.ps1 -Path "D:\Scenarios" -MaxBusinessKeyCount 8
+    .\Test-Scenarios.ps1 -Path "D:\Scenarios" -MaxBusinessKeyCount 8
 #>
 
 param (
@@ -939,7 +939,7 @@ if ($PSBoundParameters.ContainsKey('OutputDirectory') -and -not [string]::IsNull
     if (Test-Path -Path $OutputDirectory) {
         $outputItem = Get-Item -Path $OutputDirectory
         if ($outputItem.PSIsContainer) {
-            $outputFilePath = Join-Path -Path $OutputDirectory -ChildPath "Validate-Scenarios_$timestamp.txt"
+            $outputFilePath = Join-Path -Path $OutputDirectory -ChildPath "Test-Scenarios_$timestamp.txt"
         } else {
             $outputFilePath = $OutputDirectory
         }
@@ -947,7 +947,7 @@ if ($PSBoundParameters.ContainsKey('OutputDirectory') -and -not [string]::IsNull
         $extension = [System.IO.Path]::GetExtension($OutputDirectory)
         if ([string]::IsNullOrWhiteSpace($extension)) {
             New-Item -Path $OutputDirectory -ItemType Directory -Force | Out-Null
-            $outputFilePath = Join-Path -Path $OutputDirectory -ChildPath "Validate-Scenarios_$timestamp.txt"
+            $outputFilePath = Join-Path -Path $OutputDirectory -ChildPath "Test-Scenarios_$timestamp.txt"
         } else {
             $parentPath = Split-Path -Path $OutputDirectory -Parent
             if ($parentPath -and -not (Test-Path -Path $parentPath)) {

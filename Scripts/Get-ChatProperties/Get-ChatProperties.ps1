@@ -17,10 +17,10 @@
     Optional array of property names to keep. If not specified, defaults to Summary, KeyTopics, and WorkflowIdeas.
 
 .EXAMPLE
-    .\Extract-ChatProperties.ps1 -InputFile "input.json" -OutputFile "output.json"
+    .\Get-ChatProperties.ps1 -InputFile "input.json" -OutputFile "output.json"
 
 .EXAMPLE
-    .\Extract-ChatProperties.ps1 -InputFile "input.json" -OutputFile "output.json" -Properties "Summary", "ConfidenceScore"
+    .\Get-ChatProperties.ps1 -InputFile "input.json" -OutputFile "output.json" -Properties "Summary", "ConfidenceScore"
 
 #>
 

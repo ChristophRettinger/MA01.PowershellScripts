@@ -62,7 +62,7 @@
     error text, cause the entry to be ignored.
 
 .EXAMPLE
-    ./Evaluate-AdmKavideErrors.ps1 -StartDate (Get-Date).AddDays(-1) `
+    ./Get-AdmKavideErrors.ps1 -StartDate (Get-Date).AddDays(-1) `
         -Environment production
 #>
 param(

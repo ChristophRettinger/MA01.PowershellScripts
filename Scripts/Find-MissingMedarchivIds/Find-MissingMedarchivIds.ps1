@@ -59,7 +59,7 @@
     Defaults to '<script folder>/Output'. One file per Anstalt.
 
 .EXAMPLE
-    ./Process-MissingMedarchiv.ps1 -StartDate '2025-09-03'
+    ./Find-MissingMedarchivIds.ps1 -StartDate '2025-09-03'
 
     Runs the query for records processed after 3 September 2025 and outputs the
     min, max, and count of CL_ID_BIG values with the Anstalt identifier from both

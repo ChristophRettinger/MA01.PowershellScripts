@@ -20,19 +20,19 @@
     record (lowest @timestamp) is kept for processing.
 
 .EXAMPLE
-    .\Resend-FromElastic.ps1 -Action Query -BusinessCaseId 021000005865627450708147
+    .\Invoke-ElasticResend.ps1 -Action Query -BusinessCaseId 021000005865627450708147
     Gets information for a single BusinessCaseId/MSGID. If a result is found, it can be sent later.
 
 .EXAMPLE
-    .\Resend-FromElastic.ps1 -StartDate "2026-05-01 00:00:00" -EndDate "2026-05-21 00:00:00" -ScenarioName *3287 -WorkflowPattern ERROR
+    .\Invoke-ElasticResend.ps1 -StartDate "2026-05-01 00:00:00" -EndDate "2026-05-21 00:00:00" -ScenarioName *3287 -WorkflowPattern ERROR
     Searches for errors of a specific scenario in a given time range.
 
 .EXAMPLE
-    .\Resend-FromElastic.ps1 -Action Send -Target prod01-wsk -BusinessCaseId 011000014048434700509727,011000014048382560508756 -TargetSubId 123
+    .\Invoke-ElasticResend.ps1 -Action Send -Target prod01-wsk -BusinessCaseId 011000014048434700509727,011000014048382560508756 -TargetSubId 123
     Sends two specific records to prod01-wsk, but only to subscription 123 (when it is resolved).
 
 .EXAMPLE
-    .\Resend-FromElastic.ps1 -Action Send -Target prod01-wsk -CaseNo "92134461    26080726" -ScenarioName *HCM_empfangen* -ProcessState Test -Mode Curl -OutputDirectory output
+    .\Invoke-ElasticResend.ps1 -Action Send -Target prod01-wsk -CaseNo "92134461    26080726" -ScenarioName *HCM_empfangen* -ProcessState Test -Mode Curl -OutputDirectory output
     Creates a text file with curl statements for prod01-wsk. Received HCM messages are replayed with ProcessState set to Test.
 
 .PARAMETER StartDate
@@ -780,11 +780,11 @@ if ($OutputDirectory) {
     if (-not (Test-Path -Path $OutputDirectory)) {
         $null = New-Item -Path $OutputDirectory -ItemType Directory -Force
     }
-    $script:LogFilePath = Join-Path -Path $OutputDirectory -ChildPath ("Resend-FromElastic_{0}.log" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+    $script:LogFilePath = Join-Path -Path $OutputDirectory -ChildPath ("Invoke-ElasticResend_{0}.log" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
     New-Item -Path $script:LogFilePath -ItemType File -Force | Out-Null
 
     if ($Mode -eq 'Curl') {
-        $script:CurlOutputFilePath = Join-Path -Path $OutputDirectory -ChildPath ("Resend-FromElastic_{0}.curl.txt" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+        $script:CurlOutputFilePath = Join-Path -Path $OutputDirectory -ChildPath ("Invoke-ElasticResend_{0}.curl.txt" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
         New-Item -Path $script:CurlOutputFilePath -ItemType File -Force | Out-Null
     }
 }

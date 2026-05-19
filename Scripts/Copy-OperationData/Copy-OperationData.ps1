@@ -34,7 +34,7 @@
   Number of seconds to wait between batches. Defaults to one second.
 
 .EXAMPLE
-  .\Transfer-OperationData.ps1 -SourceServer "sql-biztalk" -TargetServer "sql-orchestra" \
+  .\Copy-OperationData.ps1 -SourceServer "sql-biztalk" -TargetServer "sql-orchestra" \
       -ConfigFile "C:\\Ops\\TransferState.json" -MaxRecords 1000 -DelayBetweenBatches 2
 
 .NOTES

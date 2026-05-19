@@ -24,10 +24,10 @@
     status lines.
 
 .EXAMPLE
-    .\Handle-OrchestraGit.ps1 -Path 'D:\Orchestra' -Action Status
+    .\Invoke-OrchestraGit.ps1 -Path 'D:\Orchestra' -Action Status
 
 .EXAMPLE
-    .\Handle-OrchestraGit.ps1 -Path 'D:\Orchestra' -Action Status -OutputDirectory '.\Output'
+    .\Invoke-OrchestraGit.ps1 -Path 'D:\Orchestra' -Action Status -OutputDirectory '.\Output'
 #>
 
 param (
@@ -453,7 +453,7 @@ if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
 
     if ($resolvedOutput -and (Test-Path -Path $resolvedOutput.Path -PathType Container)) {
         $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-        $outputPath = Join-Path -Path $resolvedOutput.Path -ChildPath "Handle-OrchestraGit-$($timestamp).txt"
+        $outputPath = Join-Path -Path $resolvedOutput.Path -ChildPath "Invoke-OrchestraGit-$($timestamp).txt"
     } else {
         $extension = [System.IO.Path]::GetExtension($OutputDirectory)
         if ([string]::IsNullOrWhiteSpace($extension)) {
@@ -462,7 +462,7 @@ if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
             }
 
             $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-            $outputPath = Join-Path -Path $OutputDirectory -ChildPath "Handle-OrchestraGit-$($timestamp).txt"
+            $outputPath = Join-Path -Path $OutputDirectory -ChildPath "Invoke-OrchestraGit-$($timestamp).txt"
         } else {
             $outputPath = $OutputDirectory
         }

@@ -30,10 +30,10 @@
     not referenced in scripts, assignments, expressions, or shape parameter names.
 
 .EXAMPLE
-    .\Create-ProcessModelOverview.ps1 -ProcessModelPath .\ProcessModell_25
+    .\New-ProcessModelOverview.ps1 -ProcessModelPath .\ProcessModell_25
 
 .EXAMPLE
-    .\Create-ProcessModelOverview.ps1 -FolderPath .\ScenarioA -CheckUnusedVariables
+    .\New-ProcessModelOverview.ps1 -FolderPath .\ScenarioA -CheckUnusedVariables
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'File')]

@@ -17,7 +17,7 @@
   Defaults to 'LookupHostname'.
 
 .EXAMPLE
-  .\Add-HostNames.ps1 -InputCsv .\data.csv -OutputCsv .\out.csv `
+  .\Resolve-HostNames.ps1 -InputCsv .\data.csv -OutputCsv .\out.csv `
       -IpColumn "ClientIp" -HostNameColumn "ResolvedName"
 #>
 param(

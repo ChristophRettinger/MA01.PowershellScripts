@@ -48,7 +48,7 @@
     Defaults to '<script folder>/Output'.
 
 .EXAMPLE
-    ./Process-MissingADM.ps1 -StartDate '2025-09-03'
+    ./Find-MissingAdmIds.ps1 -StartDate '2025-09-03'
 
     Runs the query for records processed after 3 September 2025 and outputs the
     min, max, and count of CL_ID values from both SQL and Elasticsearch, writing

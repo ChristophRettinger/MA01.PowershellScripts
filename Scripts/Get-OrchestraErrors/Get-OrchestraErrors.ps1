@@ -80,7 +80,7 @@
     `BusinessCaseId`.
 
 .EXAMPLE
-    ./Evaluate-OrchestraErrorsViaElastic.ps1 -ScenarioName MyScenario `
+    ./Get-OrchestraErrors.ps1 -ScenarioName MyScenario `
         -Environment production
 #>
 param(
@@ -117,7 +117,7 @@ param(
     [string]$Mode = 'Overview',
 
     [Parameter(Mandatory=$false)]
-    [string]$Configuration = (Join-Path -Path $PSScriptRoot -ChildPath 'Evaluate-OrchestraErrorsViaElastic.config.json'),
+    [string]$Configuration = (Join-Path -Path $PSScriptRoot -ChildPath 'Get-OrchestraErrors.config.json'),
 
     [Parameter(Mandatory=$false)]
     [string]$MessagePart,

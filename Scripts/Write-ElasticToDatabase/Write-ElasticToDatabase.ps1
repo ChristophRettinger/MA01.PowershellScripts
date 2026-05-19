@@ -39,7 +39,7 @@
     Optional directory to write a plain-text run summary. A timestamped file is created inside this directory when set.
 
 .EXAMPLE
-    ./Write-ElasticDataToDatabase.ps1 -StartDate (Get-Date).Date -EndDate (Get-Date)
+    ./Write-ElasticToDatabase.ps1 -StartDate (Get-Date).Date -EndDate (Get-Date)
 #>
 param(
     [Parameter(Mandatory=$true)]

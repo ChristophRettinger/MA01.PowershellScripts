@@ -48,6 +48,7 @@ Read the full file. All subsequent checks are based on this content.
 | P4 | `Invoke-RestMethod` or `Invoke-WebRequest` called without `-ErrorAction Stop` and outside a `try/catch` | WARN |
 | P5 | Bare `exit` without an exit code in an error path | INFO |
 | P6 | `$null -eq` check written the wrong way around (`$x -eq $null`) — arrays can cause false results | INFO |
+| P7 | Script file name uses a non-approved verb as its `Verb-` prefix — applies the same `Get-Verb` rule as P1 but to the `.ps1` file name itself. Common offenders: `Analyze-`, `Evaluate-`, `Process-`, `Extract-`, `Create-`, `Handle-`, `Call-`, `Transfer-`, `Resend-`, `Validate-` | WARN |
 
 ### Step 5 — Security checks
 
