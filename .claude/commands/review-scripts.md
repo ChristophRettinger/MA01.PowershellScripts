@@ -177,6 +177,7 @@ Scripts that produce structured tabular data use `Export-Csv -NoTypeInformation 
 | OUT8 | `Export-Csv` without `-Encoding UTF8` | WARN |
 | OUT9 | `Add-Content` without `-Encoding UTF8` | WARN |
 | OUT10 | `Get-Content` without `-Encoding UTF8` when reading files that are expected to be UTF-8 (script-produced files, config files) | INFO |
+| OUT11 | Script writes a file to a path derived from `$OutputDirectory` but never calls `New-Item -ItemType Directory -Force` (or `[IO.Directory]::CreateDirectory`) before the write — fails if the directory does not exist | WARN |
 
 ### Step 12 — Project conventions
 

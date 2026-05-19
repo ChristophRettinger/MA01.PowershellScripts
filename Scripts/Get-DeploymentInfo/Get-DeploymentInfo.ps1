@@ -685,6 +685,7 @@ elseif ($Mode -eq 'Landscape') {
 # ─── Write Output File ────────────────────────────────────────────────────────────
 
 if ($OutputDirectory -and $script:OutputBuilder) {
+    $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $serverStr = $Server -join '_'
     $fileName  = "Get-DeploymentInfo_${serverStr}_${timestamp}.txt"
