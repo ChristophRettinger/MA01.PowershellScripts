@@ -103,7 +103,9 @@ param(
     [switch]$IgnoreTlsError,
 
     [ValidateRange(1, 600000)]
-    [int]$ReceiveTimeoutMs = 10000
+    [int]$ReceiveTimeoutMs = 10000,
+
+    [string]$OutputDirectory = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -247,6 +249,12 @@ function Get-RequestMessage {
     return "MSH|^~\&|$($Sender)|$($Sender)|Orch|Orch|$($timestamp)||QRY^$($Message)|$($messageControlId)|P|2.4`rQRD|$($timestamp)|R|I|$($queryId)|||1^RD|$($AID)|MAC"
 }
 
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
 try {
     $wireEncoding = [System.Text.Encoding]::GetEncoding($Encoding)
 }
@@ -375,6 +383,17 @@ try {
         Write-Host 'Server response:'
         Write-Host
         Write-Hl7Colorized -Message $responseMessage
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
+        if (-not (Test-Path -Path $OutputDirectory)) {
+            $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
+        }
+        $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+        $outputPath = Join-Path -Path $OutputDirectory -ChildPath "HL7Exchange_$timestamp.txt"
+        $lines = @("=== Request ===", $hl7Message, '', "=== Response ===", $responseMessage)
+        $lines | Set-Content -Path $outputPath -Encoding UTF8
+        Write-Host "Exchange saved to '$outputPath'" -ForegroundColor Cyan
     }
 }
 catch {

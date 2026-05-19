@@ -25,6 +25,10 @@
 .PARAMETER Evidence
     Include evidence file paths for each matched code. Disabled by default.
 
+.PARAMETER OutputDirectory
+    Optional folder path where a plain-text copy of the report is written. If not
+    specified, output is printed to the console only.
+
 .EXAMPLE
     .\Show-ScenarioUsages.ps1 -Path 'D:\Scenarios' -CodeTypes Desired,Warning
 
@@ -47,8 +51,64 @@ param (
     [string[]]$CodeTypes,
 
     [Parameter(Mandatory = $false)]
-    [switch]$Evidence
+    [switch]$Evidence,
+
+    [Parameter(Mandatory = $false)]
+    [string]$OutputDirectory = ''
 )
+
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'Common\ScenarioHelpers.ps1')
+
+function Get-TargetKind {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$FileName
+    )
+
+    if ($FileName -like 'ProcessModell_*') { return 'ProcessModel' }
+    if ($FileName -like 'MessageMapping_*') { return 'MessageMapping' }
+    return 'Any'
+}
+
+function Test-DefinitionMatch {
+    param (
+        [Parameter(Mandatory = $true)]
+        [object]$Definition,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Content
+    )
+
+    if ($Definition.MatchAny.Count -gt 0) {
+        foreach ($needle in $Definition.MatchAny) {
+            if ($Content.IndexOf($needle, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                return $true
+            }
+        }
+
+        return $false
+    }
+
+    foreach ($needle in $Definition.MatchAll) {
+        if ($Content.IndexOf($needle, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            return $false
+        }
+    }
+
+    return $Definition.MatchAll.Count -gt 0
+}
+
+function Write-ReportLine {
+    param([string]$Text = '', [string]$Color = 'White')
+    Write-Host $Text -ForegroundColor $Color
+    [void]$script:outputLines.Add($Text)
+}
+
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
 
 $resolvedPath = (Resolve-Path -Path $Path).Path
 
@@ -106,78 +166,7 @@ $script:codeDefinitions = @(
     }
 )
 
-function Get-ScenarioInfo {
-    param (
-        [Parameter(Mandatory = $true)]
-        [string]$FilePath,
-
-        [Parameter(Mandatory = $true)]
-        [string]$RootPath
-    )
-
-    $directoryPath = Split-Path -Path $FilePath -Parent
-    $rootPathNormalized = [System.IO.Path]::GetFullPath($RootPath).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    $directoryPathNormalized = [System.IO.Path]::GetFullPath($directoryPath).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    $relativePath = ''
-
-    if ($directoryPathNormalized.Length -ge $rootPathNormalized.Length -and $directoryPathNormalized.StartsWith($rootPathNormalized, [System.StringComparison]::OrdinalIgnoreCase)) {
-        $relativePath = $directoryPathNormalized.Substring($rootPathNormalized.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    }
-
-    if ($relativePath) {
-        $relativePathSegments = @([regex]::Split($relativePath, '[\\/]+') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        $scenarioName = if ($relativePathSegments.Count -gt 0) { [string]$relativePathSegments[0] } else { '' }
-        $scenarioPath = Join-Path -Path $RootPath -ChildPath $scenarioName
-    }
-    else {
-        $scenarioName = Split-Path -Path $directoryPath -Leaf
-        $scenarioPath = $directoryPath
-    }
-
-    [PSCustomObject]@{
-        Name = $scenarioName
-        Path = $scenarioPath
-    }
-}
-
-function Get-TargetKind {
-    param (
-        [Parameter(Mandatory = $true)]
-        [string]$FileName
-    )
-
-    if ($FileName -like 'ProcessModell_*') { return 'ProcessModel' }
-    if ($FileName -like 'MessageMapping_*') { return 'MessageMapping' }
-    return 'Any'
-}
-
-function Test-DefinitionMatch {
-    param (
-        [Parameter(Mandatory = $true)]
-        [object]$Definition,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Content
-    )
-
-    if ($Definition.MatchAny.Count -gt 0) {
-        foreach ($needle in $Definition.MatchAny) {
-            if ($Content.IndexOf($needle, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-                return $true
-            }
-        }
-
-        return $false
-    }
-
-    foreach ($needle in $Definition.MatchAll) {
-        if ($Content.IndexOf($needle, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
-            return $false
-        }
-    }
-
-    return $Definition.MatchAll.Count -gt 0
-}
+$script:outputLines = [System.Collections.Generic.List[string]]::new()
 
 $requestedCodeSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 if ($PSBoundParameters.ContainsKey('Codes') -and $Codes) {
@@ -328,37 +317,48 @@ foreach ($definition in $selectedDefinitions) {
     $codeTotals[$definition.Code] = 0
 }
 
-Write-Host ''
-Write-Host 'Scenario usage report' -ForegroundColor White
-Write-Host ('Root: {0}' -f $resolvedPath) -ForegroundColor DarkGray
-Write-Host ('Selected codes: {0}' -f (($selectedDefinitions | Select-Object -ExpandProperty Code) -join ', ')) -ForegroundColor DarkGray
-Write-Host ''
+Write-ReportLine
+Write-ReportLine 'Scenario usage report' 'White'
+Write-ReportLine ('Root: {0}' -f $resolvedPath) 'DarkGray'
+Write-ReportLine ('Selected codes: {0}' -f (($selectedDefinitions | Select-Object -ExpandProperty Code) -join ', ')) 'DarkGray'
+Write-ReportLine
 
 foreach ($scenario in $scenarioItems) {
-    Write-Host $scenario.Name -ForegroundColor Magenta
-    Write-Host ('  Path: {0}' -f $scenario.Path) -ForegroundColor DarkGray
+    Write-ReportLine $scenario.Name 'Magenta'
+    Write-ReportLine ('  Path: {0}' -f $scenario.Path) 'DarkGray'
 
     $hits = @($scenario.Hits.Values | Sort-Object -Property Code)
     if ($hits.Count -eq 0) {
-        Write-Host '  (no matching usages)' -ForegroundColor DarkGray
-        Write-Host ''
+        Write-ReportLine '  (no matching usages)' 'DarkGray'
+        Write-ReportLine
         continue
     }
 
     foreach ($hit in $hits) {
         $codeTotals[$hit.Code] = $codeTotals[$hit.Code] + 1
         $typeColor = if ($colorByType.ContainsKey($hit.Type)) { $colorByType[$hit.Type] } else { 'Gray' }
-        Write-Host ("  [$($hit.Code)] [$($hit.Type)] $($hit.Description)") -ForegroundColor $typeColor
+        $hitLine = "  [$($hit.Code)] [$($hit.Type)] $($hit.Description)"
+        Write-ReportLine $hitLine $typeColor
         if ($Evidence) {
-            Write-Host ("    Evidence: $($hit.Evidence)") -ForegroundColor DarkGray
+            Write-ReportLine "    Evidence: $($hit.Evidence)" 'DarkGray'
         }
     }
 
-    Write-Host ''
+    Write-ReportLine
 }
 
-Write-Host 'Code summary' -ForegroundColor White
+Write-ReportLine 'Code summary' 'White'
 foreach ($definition in ($selectedDefinitions | Sort-Object -Property Code)) {
     $typeColor = if ($colorByType.ContainsKey($definition.Type)) { $colorByType[$definition.Type] } else { 'Gray' }
-    Write-Host ("  [$($definition.Code)] [$($definition.Type)] scenarios: $($codeTotals[$definition.Code])") -ForegroundColor $typeColor
+    Write-ReportLine "  [$($definition.Code)] [$($definition.Type)] scenarios: $($codeTotals[$definition.Code])" $typeColor
+}
+
+if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    if (-not (Test-Path -Path $OutputDirectory)) {
+        $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
+    }
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $outputPath = Join-Path -Path $OutputDirectory -ChildPath "Show-ScenarioUsages_$timestamp.txt"
+    $script:outputLines | Set-Content -Path $outputPath -Encoding UTF8
+    Write-Host "Report written to '$outputPath'" -ForegroundColor Cyan
 }

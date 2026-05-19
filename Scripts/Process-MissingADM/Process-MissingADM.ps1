@@ -288,10 +288,10 @@ if ($esQuerySucceeded -and $dbCount -ne $esCount) {
             $fileName = "MissingIds_ADM_${datePartStart}_${datePartEnd}.txt"
             $filePath = Join-Path -Path $OutputDirectory -ChildPath $fileName
             $missing | Sort-Object {[long]$_} -ErrorAction SilentlyContinue | Set-Content -Path $filePath -Encoding UTF8
-            Write-Host "[ADM] Wrote missing IDs to: $filePath"
+            Write-Host "[ADM] Wrote missing IDs to: $($filePath)" -ForegroundColor Green
         }
         else {
-            Write-Host '[ADM] No missing IDs to write.'
+            Write-Host '[ADM] No missing IDs to write.' -ForegroundColor Yellow
         }
     }
     catch {

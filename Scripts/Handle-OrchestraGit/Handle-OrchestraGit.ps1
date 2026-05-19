@@ -19,7 +19,7 @@
     `Reset` also removes untracked files. `Clean` untracks files that are currently
     tracked but match `.git/info/exclude` rules.
 
-.PARAMETER Output
+.PARAMETER OutputDirectory
     Optional output file path or output folder path to additionally write the plain-text
     status lines.
 
@@ -27,7 +27,7 @@
     .\Handle-OrchestraGit.ps1 -Path 'D:\Orchestra' -Action Status
 
 .EXAMPLE
-    .\Handle-OrchestraGit.ps1 -Path 'D:\Orchestra' -Action Status -Output '.\Output'
+    .\Handle-OrchestraGit.ps1 -Path 'D:\Orchestra' -Action Status -OutputDirectory '.\Output'
 #>
 
 param (
@@ -39,7 +39,7 @@ param (
     [string]$Action = 'Status',
 
     [Parameter(Mandatory = $false)]
-    [string]$Output
+    [string]$OutputDirectory
 )
 
 $requiredExcludeEntries = @(
@@ -87,7 +87,7 @@ function Resolve-RepositoryRoots {
     return $repositories | Sort-Object
 }
 
-function Ensure-GitExcludeEntries {
+function Add-GitExcludeEntries {
     param (
         [Parameter(Mandatory = $true)]
         [string]$RepositoryPath,
@@ -382,6 +382,12 @@ function Get-OutputStatusLine {
     return "$($repoDisplay) | $($lastCommitDisplay) | $($tagDisplay) | $($Status.Overview)"
 }
 
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
 $repositoryRoots = Resolve-RepositoryRoots -RootPath $Path
 if (-not $repositoryRoots -or $repositoryRoots.Count -eq 0) {
     Write-Warning "No git repositories found below '$($Path)'."
@@ -393,7 +399,7 @@ $outputLines = New-Object System.Collections.Generic.List[string]
 switch ($Action) {
     'Status' {
         foreach ($repositoryRoot in $repositoryRoots) {
-            Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
+            Add-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Write-RepositoryStatusLine -Status $status
             $outputLines.Add((Get-OutputStatusLine -Status $status)) | Out-Null
@@ -401,7 +407,7 @@ switch ($Action) {
     }
     'Update' {
         foreach ($repositoryRoot in $repositoryRoots) {
-            Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
+            Add-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
             $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
@@ -411,7 +417,7 @@ switch ($Action) {
     }
     'Pull' {
         foreach ($repositoryRoot in $repositoryRoots) {
-            Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
+            Add-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
             $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
@@ -421,7 +427,7 @@ switch ($Action) {
     }
     'Reset' {
         foreach ($repositoryRoot in $repositoryRoots) {
-            Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
+            Add-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
             $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
@@ -431,7 +437,7 @@ switch ($Action) {
     }
     'Clean' {
         foreach ($repositoryRoot in $repositoryRoots) {
-            Ensure-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
+            Add-GitExcludeEntries -RepositoryPath $repositoryRoot -Entries $requiredExcludeEntries
             $statusBefore = Get-RepositoryStatus -RepositoryPath $repositoryRoot
             Invoke-RepositoryAction -RepositoryPath $repositoryRoot -ActionName $Action -Status $statusBefore
             $status = Get-RepositoryStatus -RepositoryPath $repositoryRoot
@@ -441,24 +447,24 @@ switch ($Action) {
     }
 }
 
-if (-not [string]::IsNullOrWhiteSpace($Output)) {
-    $resolvedOutput = Resolve-Path -Path $Output -ErrorAction SilentlyContinue
+if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    $resolvedOutput = Resolve-Path -Path $OutputDirectory -ErrorAction SilentlyContinue
     $outputPath = $null
 
     if ($resolvedOutput -and (Test-Path -Path $resolvedOutput.Path -PathType Container)) {
         $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
         $outputPath = Join-Path -Path $resolvedOutput.Path -ChildPath "Handle-OrchestraGit-$($timestamp).txt"
     } else {
-        $extension = [System.IO.Path]::GetExtension($Output)
+        $extension = [System.IO.Path]::GetExtension($OutputDirectory)
         if ([string]::IsNullOrWhiteSpace($extension)) {
-            if (-not (Test-Path -Path $Output -PathType Container)) {
-                New-Item -Path $Output -ItemType Directory -Force | Out-Null
+            if (-not (Test-Path -Path $OutputDirectory -PathType Container)) {
+                New-Item -Path $OutputDirectory -ItemType Directory -Force | Out-Null
             }
 
             $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-            $outputPath = Join-Path -Path $Output -ChildPath "Handle-OrchestraGit-$($timestamp).txt"
+            $outputPath = Join-Path -Path $OutputDirectory -ChildPath "Handle-OrchestraGit-$($timestamp).txt"
         } else {
-            $outputPath = $Output
+            $outputPath = $OutputDirectory
         }
     }
 

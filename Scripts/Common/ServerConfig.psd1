@@ -2,6 +2,12 @@
 # Central registry of all infrastructure endpoints, server names, and connection strings.
 # Credentials (API keys, passwords) are stored separately as .credentials.clixml files.
 @{
+    # ── Transfer-OperationData databases ──────────────────────────────────────────
+    TransferOperationData = @{
+        SourceDatabase = 'BiztalkApplicationData'
+        TargetDatabase = 'OrchestraOperationData'
+    }
+
     # ── Elasticsearch ──────────────────────────────────────────────────────────────
     Elasticsearch = @{
         OrchestraSearchUrl        = 'https://es-obs.apps.zeus.wien.at/logs-orchestra.journals*/_search'

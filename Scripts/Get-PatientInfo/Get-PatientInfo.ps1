@@ -156,38 +156,6 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
 . $sharedHelpersPath
 . (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
-$includeEndDate = $PSBoundParameters.ContainsKey('EndDate')
-if ($includeEndDate -and $PSBoundParameters.ContainsKey('Timespan')) {
-    throw 'Specify either EndDate or Timespan, not both.'
-}
-
-if ($PSBoundParameters.ContainsKey('Timespan')) {
-    $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
-    if ($StartDate) {
-        $EndDate = $StartDate.Add($effectiveTimespan)
-    } else {
-        $EndDate = Get-Date
-        $StartDate = $EndDate.Subtract($effectiveTimespan)
-    }
-} else {
-    if (-not $EndDate) {
-        $EndDate = Get-Date
-    }
-
-    if (-not $StartDate) {
-        $StartDate = $EndDate.AddDays(-14)
-    }
-}
-
-if (-not $PIDISH -and -not $CASENO) {
-    Write-Error 'Provide either PIDISH or CASENO to search for patient information.'
-    return
-}
-
-if ($PIDISH) { $PIDISH = $PIDISH.Trim() }
-if ($CASENO) { $CASENO = $CASENO.Trim() }
-if ($MOVENO) { $MOVENO = $MOVENO.Trim() }
-
 function Get-CaseFieldName {
     param(
         [string]$CaseNumber
@@ -503,7 +471,7 @@ function Get-CaseValuesFromSource {
     return $values
 }
 
-function ShouldIncludeCaseResult {
+function Test-IncludeCaseResult {
     param(
         [object]$Hit,
         [string]$TargetCase
@@ -527,7 +495,7 @@ function ShouldIncludeCaseResult {
 function Add-Hits {
     param([object[]]$Hits)
     foreach ($hit in $Hits) {
-        if (-not (ShouldIncludeCaseResult -Hit $hit -TargetCase $caseFilterValue)) {
+        if (-not (Test-IncludeCaseResult -Hit $hit -TargetCase $caseFilterValue)) {
             continue
         }
         $identifier = $hit._id
@@ -536,6 +504,44 @@ function Add-Hits {
         }
     }
 }
+
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
+$includeEndDate = $PSBoundParameters.ContainsKey('EndDate')
+if ($includeEndDate -and $PSBoundParameters.ContainsKey('Timespan')) {
+    throw 'Specify either EndDate or Timespan, not both.'
+}
+
+if ($PSBoundParameters.ContainsKey('Timespan')) {
+    $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
+    if ($StartDate) {
+        $EndDate = $StartDate.Add($effectiveTimespan)
+    } else {
+        $EndDate = Get-Date
+        $StartDate = $EndDate.Subtract($effectiveTimespan)
+    }
+} else {
+    if (-not $EndDate) {
+        $EndDate = Get-Date
+    }
+
+    if (-not $StartDate) {
+        $StartDate = $EndDate.AddDays(-14)
+    }
+}
+
+if (-not $PIDISH -and -not $CASENO) {
+    Write-Error 'Provide either PIDISH or CASENO to search for patient information.'
+    return
+}
+
+if ($PIDISH) { $PIDISH = $PIDISH.Trim() }
+if ($CASENO) { $CASENO = $CASENO.Trim() }
+if ($MOVENO) { $MOVENO = $MOVENO.Trim() }
 
 $initialPidFilters = @()
 if ($PIDISH) { $initialPidFilters += $PIDISH.Trim() }

@@ -64,7 +64,7 @@ try {
     # Write output as JSON
     $simplified | ConvertTo-Json -Depth 5 | Set-Content -Path $OutputFile -Encoding UTF8
 
-    Write-Host "Simplified JSON written to '$OutputFile'"
+    Write-Host "Simplified JSON written to '$OutputFile'" -ForegroundColor Green
 }
 catch {
     Write-Error "An error occurred: $_"

@@ -134,49 +134,6 @@ if (-not (Test-Path -Path $sharedHelpersPath)) {
 . $sharedHelpersPath
 . (Join-Path $sharedHelpersDirectory 'ServerConfig.ps1')
 
-# Determine default StartDate/EndDate
-$includeEnd = $PSBoundParameters.ContainsKey('EndDate')
-if ($includeEnd -and $PSBoundParameters.ContainsKey('Timespan')) {
-    throw 'Specify either EndDate or Timespan, not both.'
-}
-
-if (-not $PSBoundParameters.ContainsKey('StartDate')) {
-    $StartDate = [datetime]::Today
-}
-
-if (-not $includeEnd) {
-    $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
-    $EndDate = $StartDate.Add($effectiveTimespan)
-    $includeEnd = $true
-}
-
-if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
-    $ElasticUrl = (Get-ServerConfig).Elasticsearch.OrchestraSearchUrl
-}
-
-$credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
-$elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
-$headers = @{ 'Authorization' = "ApiKey $($elasticCred.GetNetworkCredential().Password)" }
-
-# Load regex replacements from configuration
-$replacements = @()
-if (Test-Path $Configuration) {
-    try {
-        $cfg = Get-Content -Path $Configuration -Raw | ConvertFrom-Json
-        if ($cfg.RegexReplacements) { $replacements = $cfg.RegexReplacements }
-    } catch {
-        Write-Warning "Failed to read configuration: $_"
-    }
-}
-
-$effectiveBusinessKeys = @()
-if ($BusinessKeys) {
-    foreach ($bk in $BusinessKeys) {
-        if ([string]::IsNullOrWhiteSpace($bk)) { continue }
-        if ($effectiveBusinessKeys -notcontains $bk) { $effectiveBusinessKeys += $bk }
-    }
-}
-
 function Get-SafeErrorFragment {
     param(
         [string]$ErrorText
@@ -343,6 +300,55 @@ function Save-FormattedXmlDocument {
         $Document.Save($writer)
     } finally {
         if ($writer) { $writer.Dispose() }
+    }
+}
+
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
+# Determine default StartDate/EndDate
+$includeEnd = $PSBoundParameters.ContainsKey('EndDate')
+if ($includeEnd -and $PSBoundParameters.ContainsKey('Timespan')) {
+    throw 'Specify either EndDate or Timespan, not both.'
+}
+
+if (-not $PSBoundParameters.ContainsKey('StartDate')) {
+    $StartDate = [datetime]::Today
+}
+
+if (-not $includeEnd) {
+    $effectiveTimespan = Resolve-EffectiveTimespan -Value $Timespan
+    $EndDate = $StartDate.Add($effectiveTimespan)
+    $includeEnd = $true
+}
+
+if ([string]::IsNullOrWhiteSpace($ElasticUrl)) {
+    $ElasticUrl = (Get-ServerConfig).Elasticsearch.OrchestraSearchUrl
+}
+
+$credPath = Join-Path -Path $PSScriptRoot -ChildPath 'elastic.credentials.clixml'
+$elasticCred = Resolve-ElasticCredential -CredentialPath $credPath -Reset:$ResetCredentials
+$headers = @{ 'Authorization' = "ApiKey $($elasticCred.GetNetworkCredential().Password)" }
+
+# Load regex replacements from configuration
+$replacements = @()
+if (Test-Path $Configuration) {
+    try {
+        $cfg = Get-Content -Path $Configuration -Raw | ConvertFrom-Json
+        if ($cfg.RegexReplacements) { $replacements = $cfg.RegexReplacements }
+    } catch {
+        Write-Warning "Failed to read configuration: $_"
+    }
+}
+
+$effectiveBusinessKeys = @()
+if ($BusinessKeys) {
+    foreach ($bk in $BusinessKeys) {
+        if ([string]::IsNullOrWhiteSpace($bk)) { continue }
+        if ($effectiveBusinessKeys -notcontains $bk) { $effectiveBusinessKeys += $bk }
     }
 }
 

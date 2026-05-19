@@ -37,7 +37,7 @@ param(
 # Prevent running in ConstrainedLanguage mode
 if ($ExecutionContext.SessionState.LanguageMode -eq "ConstrainedLanguage")
 {
-    Write-Host "Cannot execute script in ConstrainedLanguage ($ExecutionContext.SessionState.LanguageMode). Execute with administrative rights." -ForegroundColor Red
+    Write-Host "Cannot execute script in ConstrainedLanguage ($($ExecutionContext.SessionState.LanguageMode)). Execute with administrative rights." -ForegroundColor Red
     exit
 }
 

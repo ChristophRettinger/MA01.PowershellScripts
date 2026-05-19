@@ -47,6 +47,10 @@
 
 .PARAMETER ResetCredentials
     Prompts again for credentials and overwrites the locally saved file.
+
+.PARAMETER OutputDirectory
+    Optional directory to write the formatted XML response. A timestamped file is
+    created inside this directory when set.
 #>
 
 [CmdletBinding()]
@@ -90,9 +94,13 @@ param(
     [string]$ID5,
 
     [Parameter(Mandatory=$false)]
-    [switch]$ResetCredentials
+    [switch]$ResetCredentials,
+
+    [Parameter(Mandatory=$false)]
+    [string]$OutputDirectory = ''
 )
 
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'Common\ServerConfig.ps1')
 
 function Write-ColorizedXml {
     [CmdletBinding()]
@@ -209,18 +217,11 @@ function Write-ColorizedXml {
 function Resolve-PatAuskunftUrl {
     param([string]$TargetEnvironment)
 
-    $urlsByEnvironment = @{
-        production  = 'https://dg-patauskunft.wienkav.at/service/'
-        staging     = 'https://abndg-patauskunft.wienkav.at/service/'
-        testing     = 'https://epadg-patauskunft.wienkav.at/service/'
-        development = 'https://epadg-patauskunft.wienkav.at/service/'
-    }
-
-    if (-not $urlsByEnvironment.ContainsKey($TargetEnvironment)) {
+    $urlTable = (Get-ServerConfig).PatAuskunft
+    if (-not $urlTable.ContainsKey($TargetEnvironment)) {
         throw "Unsupported Environment '$TargetEnvironment'."
     }
-
-    return $urlsByEnvironment[$TargetEnvironment]
+    return $urlTable[$TargetEnvironment]
 }
 
 function Resolve-DefaultResultFilter {
@@ -253,6 +254,12 @@ function Resolve-DefaultResultFilter {
 
     return ''
 }
+
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
 
 $serviceUrl = Resolve-PatAuskunftUrl -TargetEnvironment $Environment
 $credentialsPath = Join-Path -Path $PSScriptRoot -ChildPath "$($Environment).credentials.clixml"
@@ -291,7 +298,11 @@ $soapEnvelope = @"
 </soap:Envelope>
 "@
 
-$response = Invoke-WebRequest -Uri $serviceUrl -Method Post -Credential $credential -ContentType 'text/xml; charset=utf-8' -Body $soapEnvelope
+try {
+    $response = Invoke-WebRequest -Uri $serviceUrl -Method Post -Credential $credential -ContentType 'text/xml; charset=utf-8' -Body $soapEnvelope -ErrorAction Stop
+} catch {
+    throw "PatAuskunft request failed: $($_.Exception.Message)"
+}
 
 [xml]$responseXml = $response.Content
 $ns = New-Object System.Xml.XmlNamespaceManager($responseXml.NameTable)
@@ -321,3 +332,13 @@ Write-Host ("Environment: $($Environment)") -ForegroundColor Cyan
 Write-Host ("ServiceUrl: $($serviceUrl)") -ForegroundColor DarkCyan
 Write-Host ''
 Write-ColorizedXml -XmlDocument $innerXml
+
+if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    if (-not (Test-Path -Path $OutputDirectory)) {
+        $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
+    }
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $outputPath = Join-Path -Path $OutputDirectory -ChildPath "PatAuskunft_$($Environment)_$timestamp.xml"
+    $stringBuilder.ToString() | Set-Content -Path $outputPath -Encoding UTF8
+    Write-Host "Response written to '$outputPath'" -ForegroundColor Cyan
+}

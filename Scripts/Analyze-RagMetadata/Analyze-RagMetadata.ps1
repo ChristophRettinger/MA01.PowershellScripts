@@ -49,6 +49,12 @@ function Get-Median {
     }
 }
 
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
 # Fields to count occurrences for
 $fieldNames = @(
     'KeyTopics',
@@ -153,4 +159,4 @@ $output = @{
 # Write to file
 $output | ConvertTo-Json -Depth 5 | Out-File -FilePath $OutputFile -Encoding UTF8
 
-Write-Host "âœ… Analysis complete. Output written to '$OutputFile'."
+Write-Host "Analysis complete. Output written to '$OutputFile'." -ForegroundColor Green

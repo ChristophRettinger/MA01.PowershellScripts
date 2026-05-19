@@ -271,13 +271,6 @@ function Initialize-SystemXmlLinq {
     }
 }
 
-Initialize-SystemXmlLinq
-
-$script:LogFilePath = $null
-$script:CurlOutputFilePath = $null
-$script:SuccessLog = [System.Collections.Generic.List[string]]::new()
-$script:ErrorLog = [System.Collections.Generic.List[string]]::new()
-
 function ConvertTo-BashSingleQuotedValue {
     param([AllowNull()][string]$Value)
 
@@ -690,6 +683,19 @@ function Invoke-RegexReplacements {
 
     return $updated
 }
+
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
+Initialize-SystemXmlLinq
+
+$script:LogFilePath = $null
+$script:CurlOutputFilePath = $null
+$script:SuccessLog = [System.Collections.Generic.List[string]]::new()
+$script:ErrorLog = [System.Collections.Generic.List[string]]::new()
 
 if ($null -ne $WorkflowPattern) {
     $WorkflowPattern = $WorkflowPattern.Trim()

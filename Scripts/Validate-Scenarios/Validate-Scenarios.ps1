@@ -58,7 +58,7 @@
     When set in Folder mode, also inspects .psc archive files found beneath the
     selected scenario folders.
 
-.PARAMETER Output
+.PARAMETER OutputDirectory
     Optional file path or folder path used to write a text copy of the validation
     results.
 
@@ -90,8 +90,10 @@ param (
     [switch]$IncludePsc,
 
     [Parameter(Mandatory = $false)]
-    [string]$Output
+    [string]$OutputDirectory
 )
+
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'Common\ScenarioHelpers.ps1')
 
 $resolvedPath = (Resolve-Path -Path $Path).Path
 
@@ -161,39 +163,6 @@ if ($Mode -eq 'PSC' -and (-not $filterProvided -or ($Filter.Count -eq 1 -and $Fi
 
 if ($IncludePsc -or $Mode -eq 'PSC') {
     Add-Type -AssemblyName 'System.IO.Compression.FileSystem' | Out-Null
-}
-
-function Get-ScenarioInfo {
-    param (
-        [Parameter(Mandatory = $true)]
-        [string]$FilePath,
-
-        [Parameter(Mandatory = $true)]
-        [string]$RootPath
-    )
-
-    $directoryPath = Split-Path -Path $FilePath -Parent
-    $rootPathNormalized = [System.IO.Path]::GetFullPath($RootPath).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    $directoryPathNormalized = [System.IO.Path]::GetFullPath($directoryPath).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    $relativePath = ''
-
-    if ($directoryPathNormalized.Length -ge $rootPathNormalized.Length -and $directoryPathNormalized.StartsWith($rootPathNormalized, [System.StringComparison]::OrdinalIgnoreCase)) {
-        $relativePath = $directoryPathNormalized.Substring($rootPathNormalized.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    }
-
-    if ($relativePath) {
-        $relativePathSegments = @([regex]::Split($relativePath, '[\\/]+') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        $scenarioName = if ($relativePathSegments.Count -gt 0) { [string]$relativePathSegments[0] } else { '' }
-        $scenarioPath = Join-Path -Path $RootPath -ChildPath $scenarioName
-    } else {
-        $scenarioName = Split-Path -Path $directoryPath -Leaf
-        $scenarioPath = $directoryPath
-    }
-
-    return [PSCustomObject]@{
-        Name = $scenarioName
-        Path = $scenarioPath
-    }
 }
 
 function Get-XmlDocument {
@@ -493,8 +462,6 @@ function Write-IssueLine {
     Add-OutputLine -Line $lineText
 }
 
-$outputLines = New-Object System.Collections.Generic.List[string]
-
 function Add-OutputLine {
     param (
         [Parameter(Mandatory = $true)]
@@ -715,6 +682,14 @@ function Add-ScenarioResult {
         }
     }
 }
+
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
+$outputLines = New-Object System.Collections.Generic.List[string]
 
 $scenarioResults = @{}
 $scenarioProcessModelStats = @{}
@@ -957,28 +932,28 @@ if (-not $scenariosWithIssues) {
 Write-Output "Total number of files processed: $($totalFilesProcessed)"
 Add-OutputLine -Line "Total number of files processed: $($totalFilesProcessed)"
 
-if ($PSBoundParameters.ContainsKey('Output') -and -not [string]::IsNullOrWhiteSpace($Output)) {
+if ($PSBoundParameters.ContainsKey('OutputDirectory') -and -not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $outputFilePath = $null
 
-    if (Test-Path -Path $Output) {
-        $outputItem = Get-Item -Path $Output
+    if (Test-Path -Path $OutputDirectory) {
+        $outputItem = Get-Item -Path $OutputDirectory
         if ($outputItem.PSIsContainer) {
-            $outputFilePath = Join-Path -Path $Output -ChildPath "Validate-Scenarios_$timestamp.txt"
+            $outputFilePath = Join-Path -Path $OutputDirectory -ChildPath "Validate-Scenarios_$timestamp.txt"
         } else {
-            $outputFilePath = $Output
+            $outputFilePath = $OutputDirectory
         }
     } else {
-        $extension = [System.IO.Path]::GetExtension($Output)
+        $extension = [System.IO.Path]::GetExtension($OutputDirectory)
         if ([string]::IsNullOrWhiteSpace($extension)) {
-            New-Item -Path $Output -ItemType Directory -Force | Out-Null
-            $outputFilePath = Join-Path -Path $Output -ChildPath "Validate-Scenarios_$timestamp.txt"
+            New-Item -Path $OutputDirectory -ItemType Directory -Force | Out-Null
+            $outputFilePath = Join-Path -Path $OutputDirectory -ChildPath "Validate-Scenarios_$timestamp.txt"
         } else {
-            $parentPath = Split-Path -Path $Output -Parent
+            $parentPath = Split-Path -Path $OutputDirectory -Parent
             if ($parentPath -and -not (Test-Path -Path $parentPath)) {
                 New-Item -Path $parentPath -ItemType Directory -Force | Out-Null
             }
-            $outputFilePath = $Output
+            $outputFilePath = $OutputDirectory
         }
     }
 

@@ -12,7 +12,7 @@
     writes one Markdown file per input model.
 
     The script prints a colored summary to the console and always writes a Markdown
-    report file into an `Output` folder next to this script (or into -OutputFolder
+    report file into an `Output` folder next to this script (or into -OutputDirectory
     if specified).
 
 .PARAMETER ProcessModelPath
@@ -21,7 +21,7 @@
 .PARAMETER FolderPath
     Path to a folder that contains process model files.
 
-.PARAMETER OutputFolder
+.PARAMETER OutputDirectory
     Optional output folder for generated Markdown files. Defaults to an `Output`
     folder next to this script.
 
@@ -45,7 +45,7 @@ param(
     [string]$FolderPath,
 
     [Parameter(Mandatory = $false)]
-    [string]$OutputFolder,
+    [string]$OutputDirectory,
 
     [Parameter(Mandatory = $false)]
     [switch]$CheckUnusedVariables
@@ -651,6 +651,12 @@ function New-ProcessModelOverview {
     }
 }
 
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
 $inputFiles = @()
 if ($PSCmdlet.ParameterSetName -eq 'File') {
     $resolved = (Resolve-Path -Path $ProcessModelPath).Path
@@ -672,8 +678,8 @@ if ($PSCmdlet.ParameterSetName -eq 'File') {
 }
 
 $resolvedOutputFolder = $null
-if ($PSBoundParameters.ContainsKey('OutputFolder') -and -not [string]::IsNullOrWhiteSpace($OutputFolder)) {
-    $resolvedOutputFolder = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputFolder)
+if ($PSBoundParameters.ContainsKey('OutputDirectory') -and -not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    $resolvedOutputFolder = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 }
 
 $results = @(foreach ($file in $inputFiles) {

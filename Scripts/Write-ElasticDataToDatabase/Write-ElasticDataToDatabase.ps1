@@ -35,6 +35,9 @@
 .PARAMETER ResetCredentials
     Discard the saved Elasticsearch credential and prompt for a new API key.
 
+.PARAMETER OutputDirectory
+    Optional directory to write a plain-text run summary. A timestamped file is created inside this directory when set.
+
 .EXAMPLE
     ./Write-ElasticDataToDatabase.ps1 -StartDate (Get-Date).Date -EndDate (Get-Date)
 #>
@@ -61,7 +64,10 @@ param(
     [string]$ElasticUrl = '',
 
     [Parameter(Mandatory=$false)]
-    [switch]$ResetCredentials
+    [switch]$ResetCredentials,
+
+    [Parameter(Mandatory=$false)]
+    [string]$OutputDirectory = ''
 )
 
 $sharedHelpersDirectory = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Common'
@@ -110,6 +116,12 @@ function ConvertTo-SubIdListXml {
     $null = $xmlBuilder.Append('</subids>')
     return $xmlBuilder.ToString()
 }
+
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
 
 $_cfg = Get-ServerConfig
 if ([string]::IsNullOrWhiteSpace($Server)) {
@@ -161,12 +173,12 @@ $pageProgress = {
     Write-Progress -Id 1 -Activity 'Loading Elasticsearch data' -Status "Page $($PageNumber) - collected $($TotalCollected)" -PercentComplete 0
 }
 
-Write-Host 'Querying Elasticsearch...'
+Write-Host 'Querying Elasticsearch...' -ForegroundColor Cyan
 $hits = Invoke-ElasticScrollSearch -ElasticUrl $ElasticUrl -Body $body -Headers $headers -TimeoutSec 120 -OnPage $pageProgress
 Write-Progress -Id 1 -Activity 'Loading Elasticsearch data' -Completed
 
 if (-not $hits -or $hits.Count -eq 0) {
-    Write-Host 'No Elasticsearch hits found for the given filter.'
+    Write-Host 'No Elasticsearch hits found for the given filter.' -ForegroundColor Yellow
     return
 }
 
@@ -241,12 +253,28 @@ try {
         $null = $bulkCopy.ColumnMappings.Add($column.ColumnName, $column.ColumnName)
     }
 
-    Write-Host "Writing $($table.Rows.Count) rows to [$($Database)].[dbo].[ElasticData] on $($Server)..."
+    Write-Host "Writing $($table.Rows.Count) rows to [$($Database)].[dbo].[ElasticData] on $($Server)..." -ForegroundColor Cyan
     $bulkCopy.WriteToServer($table)
-    Write-Host 'Finished writing rows to SQL Server.'
+    Write-Host 'Finished writing rows to SQL Server.' -ForegroundColor Green
 }
 finally {
     if ($bulkCopy) { $bulkCopy.Close() }
     if ($connection.State -ne [System.Data.ConnectionState]::Closed) { $connection.Close() }
     $connection.Dispose()
+}
+
+if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    if (-not (Test-Path -Path $OutputDirectory)) {
+        $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
+    }
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $outputPath = Join-Path -Path $OutputDirectory -ChildPath "WriteElasticData_$timestamp.txt"
+    @(
+        "StartDate : $StartDate"
+        "EndDate   : $EndDate"
+        "Server    : $Server"
+        "Database  : $Database"
+        "Rows      : $($table.Rows.Count)"
+    ) | Set-Content -Path $outputPath -Encoding UTF8
+    Write-Host "Summary written to '$outputPath'" -ForegroundColor Cyan
 }

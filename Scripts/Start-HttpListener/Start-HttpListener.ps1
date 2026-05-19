@@ -20,8 +20,8 @@
     .PARAMETER HttpsPort
         Port for HTTPS prefix (none by default). Ignored if -Prefixes supplied.
 
-    .PARAMETER LogRoot
-        Directory where per-request log files will be written. Default: <script folder>\Start-HttpListenerLogs.
+    .PARAMETER OutputDirectory
+        Directory where per-request log files will be written. Default: <script folder>\Output.
 
     .PARAMETER AllowAllMethods
         By default only POST and PUT requests are logged; others get 405. Use -AllowAllMethods to log all.
@@ -38,7 +38,7 @@
 
     .EXAMPLE
         # Listen HTTP + HTTPS; custom log root
-        pwsh ./Start-HttpListener.ps1 -HttpPort 8080 -HttpsPort 8443 -LogRoot C:\Temp\HookLogs
+        pwsh ./Start-HttpListener.ps1 -HttpPort 8080 -HttpsPort 8443 -OutputDirectory C:\Temp\HookLogs
 
     .EXAMPLE
         # Provide explicit prefixes (Linux-friendly *)
@@ -58,14 +58,14 @@ param(
     [string[]]$Prefixes,
     [int]$HttpPort = 8080,
     [int]$HttpsPort,
-    [string]$LogRoot = (Join-Path $PSScriptRoot 'Output'),
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot 'Output'),
     [switch]$AllowAllMethods,
     [int]$MaxBodyBytes = 104857600,
     [switch]$Once
 )
 
 # Ensure log root exists
-[void][IO.Directory]::CreateDirectory($LogRoot)
+[void][IO.Directory]::CreateDirectory($OutputDirectory)
 
 function Get-SafeFilePart {
     param([string]$Text)
@@ -214,6 +214,12 @@ function Write-RequestLog {
     if ($truncated) { Write-Warning "Body truncated for $($req.Url.AbsoluteUri)" }
 }
 
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
 # Build prefixes if not provided
 if (-not $Prefixes -or $Prefixes.Count -eq 0) {
     $Prefixes = @()
@@ -243,7 +249,7 @@ try {
 
 Write-Host "Listening on:" -ForegroundColor Green
 $listener.Prefixes | ForEach-Object { Write-Host "  $_" -ForegroundColor Green }
-Write-Host "Logging to: $LogRoot" -ForegroundColor Green
+Write-Host "Logging to: $OutputDirectory" -ForegroundColor Green
 if (-not $AllowAllMethods) { Write-Host "Allowed methods: POST, PUT" -ForegroundColor Green }
 
 $stopRequested = $false
@@ -277,7 +283,7 @@ while ($listener.IsListening -and -not $stopRequested) {
         continue
     }
 
-    Write-RequestLog -Context $ctx -LogRoot $LogRoot -MaxBodyBytes $MaxBodyBytes
+    Write-RequestLog -Context $ctx -LogRoot $OutputDirectory -MaxBodyBytes $MaxBodyBytes
 
     if ($Once) { break }
 }

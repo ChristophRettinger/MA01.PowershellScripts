@@ -15,7 +15,13 @@
   Server portion of a typical connection string (e.g. server name, server\\instance, or hostname:port).
 
 .PARAMETER TargetServer
-  The SQL Server instance hosting the OrchestraOperationData database.
+  The SQL Server instance hosting the target database.
+
+.PARAMETER SourceDatabase
+  Name of the source SQL Server database. Defaults to ServerConfig.psd1 (TransferOperationData.SourceDatabase).
+
+.PARAMETER TargetDatabase
+  Name of the target SQL Server database. Defaults to ServerConfig.psd1 (TransferOperationData.TargetDatabase).
 
 .PARAMETER ConfigFile
   Path to the JSON file used to store the last processed DataStoreId. The file is created if it does not exist.
@@ -42,6 +48,12 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $TargetServer,
 
+    [Parameter(Mandatory = $false)]
+    [string] $SourceDatabase = '',
+
+    [Parameter(Mandatory = $false)]
+    [string] $TargetDatabase = '',
+
     [Parameter(Mandatory = $true)]
     [string] $ConfigFile,
 
@@ -52,15 +64,7 @@ param(
     [int] $DelayBetweenBatches = 1
 )
 
-if ($MaxRecords -le 0) {
-    Write-Error "MaxRecords must be greater than zero."
-    return
-}
-
-Add-Type -AssemblyName System.Data
-
-$batchSize = 100
-$activityName = 'Transferring operation data'
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'Common\ServerConfig.ps1')
 
 function Get-LastProcessedDataStoreId {
     param(
@@ -115,13 +119,33 @@ function Save-LastProcessedDataStoreId {
     }
 }
 
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
+if ($MaxRecords -le 0) {
+    Write-Error 'MaxRecords must be greater than zero.'
+    return
+}
+
+Add-Type -AssemblyName System.Data
+
+$batchSize = 100
+$activityName = 'Transferring operation data'
+
+$_cfg = Get-ServerConfig
+if ([string]::IsNullOrWhiteSpace($SourceDatabase)) { $SourceDatabase = $_cfg.TransferOperationData.SourceDatabase }
+if ([string]::IsNullOrWhiteSpace($TargetDatabase)) { $TargetDatabase = $_cfg.TransferOperationData.TargetDatabase }
+
 $lastProcessedId = Get-LastProcessedDataStoreId -Path $ConfigFile
 if ($null -eq $lastProcessedId) {
     $lastProcessedId = 0
 }
 
-$sourceConnectionString = "Server=$SourceServer;Database=BiztalkApplicationData;Integrated Security=SSPI;TrustServerCertificate=True;"
-$targetConnectionString = "Server=$TargetServer;Database=OrchestraOperationData;Integrated Security=SSPI;TrustServerCertificate=True;"
+$sourceConnectionString = "Server=$SourceServer;Database=$SourceDatabase;Integrated Security=SSPI;TrustServerCertificate=True;"
+$targetConnectionString = "Server=$TargetServer;Database=$TargetDatabase;Integrated Security=SSPI;TrustServerCertificate=True;"
 
 $processedCount = 0
 
@@ -268,4 +292,4 @@ finally {
     if ($targetConnection) { $targetConnection.Dispose() }
 }
 
-Write-Host "Transferred $processedCount record(s). Last DataStoreId processed: $lastProcessedId."
+Write-Host "Transferred $processedCount record(s). Last DataStoreId processed: $lastProcessedId." -ForegroundColor Green

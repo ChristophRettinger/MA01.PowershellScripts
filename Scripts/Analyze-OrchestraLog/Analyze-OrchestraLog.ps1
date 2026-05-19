@@ -166,6 +166,12 @@ function Format-Statement {
     return (($normalized -replace '\s+', ' ').Trim())
 }
 
+<#
+════════════════════════════════════════════════════════
+  SCRIPT BODY
+════════════════════════════════════════════════════════
+#>
+
 $files = @(Resolve-LogFiles -InputPaths $LogPath)
 if ($files.Count -eq 0) {
     throw 'No log files found for the provided -LogPath values.'

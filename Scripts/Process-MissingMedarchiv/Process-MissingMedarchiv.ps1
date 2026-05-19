@@ -323,9 +323,9 @@ foreach ($map in $targetMappings) {
                 $fileName = "MissingIds_${anst}_${dbName}_${datePartStart}_${datePartEnd}.txt"
                 $filePath = Join-Path -Path $OutputDirectory -ChildPath $fileName
                 $missing | Sort-Object {[long]$_} -ErrorAction SilentlyContinue | Set-Content -Path $filePath -Encoding UTF8
-                Write-Host "[$anst/$dbName] Wrote missing IDs to: $filePath"
+                Write-Host "[$($anst)/$($dbName)] Wrote missing IDs to: $($filePath)" -ForegroundColor Green
             } else {
-                Write-Host "[$anst/$dbName] No missing IDs to write."
+                Write-Host "[$($anst)/$($dbName)] No missing IDs to write." -ForegroundColor Yellow
             }
 
             Write-Progress -Id 2 -ParentId 1 -Activity "Anstalt $anst" -Status 'Missing IDs written' -PercentComplete 98
