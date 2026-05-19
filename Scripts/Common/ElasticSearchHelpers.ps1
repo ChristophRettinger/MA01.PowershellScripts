@@ -243,10 +243,9 @@ function Invoke-ElasticScrollSearch {
         throw [System.Exception]::new($message, $_.Exception)
     }
 
-    if ($response.error) {
-        $etype = $response.error.type
-        $ereason = $response.error.reason
-        throw [System.Exception]::new("Elasticsearch error: $etype - $ereason")
+    $responseError = $response.PSObject.Properties['error']
+    if ($responseError -and $responseError.Value) {
+        throw [System.Exception]::new("Elasticsearch error: $($responseError.Value.type) - $($responseError.Value.reason)")
     }
 
     $hits = @($response.hits.hits)
@@ -270,10 +269,9 @@ function Invoke-ElasticScrollSearch {
             throw [System.Exception]::new($message, $_.Exception)
         }
 
-        if ($scrollResponse.error) {
-            $stype = $scrollResponse.error.type
-            $sreason = $scrollResponse.error.reason
-            throw [System.Exception]::new("Elasticsearch scroll error: $stype - $sreason")
+        $scrollError = $scrollResponse.PSObject.Properties['error']
+        if ($scrollError -and $scrollError.Value) {
+            throw [System.Exception]::new("Elasticsearch scroll error: $($scrollError.Value.type) - $($scrollError.Value.reason)")
         }
 
         $hits = @($scrollResponse.hits.hits)
